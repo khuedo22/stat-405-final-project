@@ -51,4 +51,10 @@ The parameter of interest will be the coefficient for a driver's starting positi
 
 
 ## Plan
-tbd
+- data preprocessing
+- EDA
+- define some plausible models (distributions of data and parameters)
+- run model in STAN
+- build credible intervals and check whether they are well-calibrated (by predicting the next data point)
+- model rank histogram and trace plots, other diagnostics
+- iterate if needed
