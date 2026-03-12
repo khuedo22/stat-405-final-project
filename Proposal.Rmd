@@ -1,6 +1,6 @@
 ---
 title: "Proposal"
-author: ""
+author: "Shahrukh Islam Prithibi, Khue Do"
 date: "2026-03-06"
 output: pdf_document
 ---
@@ -9,22 +9,46 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Team
+Shahrukh Islam Prithibi, Khue Do
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## Datasets
+### Primary Dataset
+F1 dataset R package: https://github.com/SCasanova/f1dataR 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+This R package contains several datasets on F1 from 1950-2024. Datasets are subset by season and round (race number). Some information included are the lap times for each driver and driver telmetry. Below is the dataset of interest (I think), where each row contains information about how a driver performed in a particular race. 
 
-```{r cars}
-summary(cars)
+The columns in this table are:  TODO provide a description for these variables Shahrukh pls verify these descriptions :>
+
+- `driver_id` The name of the driver that is racing
+- `constructor_id` The car they are a part of
+- `points` How many points they earned for this race, which is based on `position`. Drivers who rank below 10th place get no points.
+- `position` Where the driver finished in the race (from 1-20)
+- `grid` Where a driver starts in the race
+- `laps`
+- `status`
+- `gap`
+- `fastest_rank`
+- `fastest`
+- `top_speed_kph`
+- `time_sec`
+
+```{r}
+library(f1dataR)
+
+head(load_results(season="current", round="last"))
 ```
 
-## Including Plots
+### Backup Dataset
 
-You can also embed plots, for example:
+tbd
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
+## Question of interest
+How does a driver's starting position (`grid`) influence where they finish in the race (`position`)? 
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Methodology
+The parameter of interest will be the coefficient for a driver's starting position. We plan to fit a Bayesian generalized regression model. Since our response variable (`position`) is a discrete value from 1-10, we might model this either as a Categorical distribution. The function for the model is $\alpha \times \text{grid}$. $p_i$ will the the logit of the function. The parameters of interest are the coefficient for grid position. This could follow a normal distribution.  We can build a hierarchial model for the parameters of the normal distribution for the coefficient.
+
+
+## Plan
+tbd
