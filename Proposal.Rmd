@@ -22,7 +22,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Team
 
-Shahrukh Islam Prithibi, Khue Do
+Shahrukh Islam Prithibi (47610068), Khue Do (70790423)
 
 ## Github Repo Link:
 
@@ -42,7 +42,7 @@ URL: <https://github.com/SCasanova/f1dataR>
 The key variables we use are:
 
 -   `driver_id` — unique identifier for the driver
--   `constructor_id` — the team the driver races for\
+-   `constructor_id` — the team the driver races for
 -   `grid` — starting grid position (1–20)
 -   `gap` — finishing time behind the race winner in seconds
 -   `position` — finishing position
@@ -123,8 +123,8 @@ head(f1_backup)
 
 ## Question of interest
 
-Does grid position affect a driver's finishing gap to the race winner,
-and does this effect vary by circuit?
+**Question: Does grid position affect a driver's finishing gap to the
+race winner, and does this effect vary by circuit?**
 
 Grid position in F1 is set during qualifying: the faster you go, the
 further up the grid you start on race day. Starting further back
@@ -161,7 +161,10 @@ The next step is to define some plausible models to use. A naive
 approach we may take is to assume all circuits have the same effect and
 model just the relationship between the grid position and the time gap.
 Since the time gap is strictly positive, we will model the log of the
-time gap + 1 to account for first place finishes (time gap of 0). The parameters for the distribution chosen below attempt to cover a wide range of plausible values since we don't know what parameter values are sensical.
+time gap + 1 to account for first place finishes (time gap of 0). The
+parameters for the distribution chosen below attempt to cover a wide
+range of plausible values since we don't know what parameter values are
+sensical.
 
 $$
 \begin{aligned}
@@ -183,7 +186,6 @@ To account for the difference in circuit, we can model this relationship
 for each 25 circuits. We can also model this in a hierarchical structure
 to reduce the sensitivity of the prior.
 
-
 $$
 \begin{aligned}
 \log(1 + \text{gap}_i) &\sim \mathcal{N}(\alpha + \beta_j \cdot \text{grid}_i,\ \sigma^2) \\
@@ -195,22 +197,25 @@ $$
 \end{aligned}
 $$
 
-$j$ represents a circuit. We may compare the two models to understand the effect circuit has on the time gap.
+$j$ represents a circuit. We may compare the two models to understand
+the effect circuit has on the time gap.
 
 We plan to compute the posterior of these models using MCMC in Stan and
 build credible intervals. After, we will perform diagnostics to evaluate
 the models, such as examining credible interval calibration via
 prediction, performing prior and posterior checks, and examining rank
 plots and trace plots. The results of these steps will determine our
-next steps, such as debugging slow mixing models or
-re-evaluating our model. This will also allow us to determine any
-limitations of our models. After building and checking our models, we will
-interpret our final results to see how grid position relates to the time
-gap and whether this effect varies by circuit.
+next steps, such as debugging slow mixing models or re-evaluating our
+model. This will also allow us to determine any limitations of our
+models. After building and checking our models, we will interpret our
+final results to see how grid position relates to the time gap and
+whether this effect varies by circuit. In addition to MCMC, we will
+refit the hierarchical model using Variational Inference and compare the
+two methods.
 
 ## Tentative Plan
 
--   literature review - Shahrukh 
+-   literature review - Shahrukh
 -   problem formulation - Shahrukh and Khue
 -   data preprocessing - Shahrukh
 -   EDA - Khue
