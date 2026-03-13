@@ -1,5 +1,6 @@
 ---
 title: "Proposal"
+subtitle: "Bayesian F1 Grid Gap Analysis" 
 author: "Shahrukh Islam Prithibi (47610068), Khue Do"
 date: "2026-03-06"
 output: pdf_document
@@ -24,6 +25,7 @@ knitr::opts_chunk$set(echo = TRUE)
 Shahrukh Islam Prithibi, Khue Do
 
 ## Github Repo Link:
+
 <https://github.com/khuedo22/stat-405-final-project.git>
 
 ## Datasets
@@ -124,15 +126,30 @@ head(f1_backup)
 Does grid position affect a driver's finishing gap to the race winner,
 and does this effect vary by circuit?
 
-Grid position in F1 is set during qualifying: the faster you go, the further up the grid you start on race day. Starting further back generally means more cars to get past and a higher chance of getting
-stuck in traffic, which should translate to finishing further behind the winner. But how much this actually matters is probably not the same everywhere. At a place like Monaco, the streets are so narrow that overtaking is nearly impossible, so where you start is pretty much where you finish. Monza is the opposite: long straights and DRS zones mean cars can pass each other more freely, so a driver starting 10th still has a realistic shot at a top finish.
+Grid position in F1 is set during qualifying: the faster you go, the
+further up the grid you start on race day. Starting further back
+generally means more cars to get past and a higher chance of getting
+stuck in traffic, which should translate to finishing further behind the
+winner. But how much this actually matters is probably not the same
+everywhere. At a place like Monaco, the streets are so narrow that
+overtaking is nearly impossible, so where you start is pretty much where
+you finish. Monza is the opposite: long straights and DRS zones mean
+cars can pass each other more freely, so a driver starting 10th still
+has a realistic shot at a top finish.
 
 This leads to our question:
 
 > *Does grid position affect a driver's finishing gap to the race
 > winner, and does this effect vary by circuit?*
 
-We want to estimate how much of a time penalty a driver faces for each grid position they start behind the front and whether that penalty is bigger at some circuits than others. We think Bayesian methods are a natural fit here since each circuit only has one race per season, so we are working with limited data per group. A hierarchical model lets circuits with less data borrow information from the broader pool of circuits rather than being estimated in isolation, which gives more reliable estimates especially for newer circuits on the calendar.
+We want to estimate how much of a time penalty a driver faces for each
+grid position they start behind the front and whether that penalty is
+bigger at some circuits than others. We think Bayesian methods are a
+natural fit here since each circuit only has one race per season, so we
+are working with limited data per group. A hierarchical model lets
+circuits with less data borrow information from the broader pool of
+circuits rather than being estimated in isolation, which gives more
+reliable estimates especially for newer circuits on the calendar.
 
 ## Methodology
 
