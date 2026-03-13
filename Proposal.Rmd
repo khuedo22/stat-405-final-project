@@ -1,7 +1,7 @@
 ---
 title: "Proposal"
 subtitle: "Bayesian F1 Grid Gap Analysis" 
-author: "Shahrukh Islam Prithibi (47610068), Khue Do"
+author: "Shahrukh Islam Prithibi (47610068), Khue Do (70790423)"
 date: "2026-03-06"
 output: pdf_document
 editor_options: 
@@ -153,23 +153,70 @@ reliable estimates especially for newer circuits on the calendar.
 
 ## Methodology
 
-The parameter of interest will be the coefficient for a driver's
-starting position. We plan to fit a Bayesian generalized regression
-model. Since our response variable (`position`) is a discrete value from
-1-10, we might model this either as a Categorical distribution. The
-function for the model is $\alpha \times \text{grid}$. $p_i$ will the
-the logit of the function. The parameters of interest are the
-coefficient for grid position. This could follow a normal distribution.
-We can build a hierarchial model for the parameters of the normal
-distribution for the coefficient.
+First, we will preprocess the data and perform some EDA on the data,
+visualizing the relationship between grid positions and time gap for
+each circuit to understand the relationship.
 
-## Plan
+The next step is to define some plausible models to use. A naive
+approach we may take is to assume all circuits have the same effect and
+model just the relationship between the grid position and the time gap.
+Since the time gap is strictly positive, we will model the log of the
+time gap + 1 to account for first place finishes (time gap of 0).
 
--   data preprocessing
--   EDA
--   define some plausible models (distributions of data and parameters)
--   run model in STAN
--   build credible intervals and check whether they are well-calibrated
-    (by predicting the next data point)
--   model rank histogram and trace plots, other diagnostics
--   iterate if needed
+$$
+\begin{aligned}
+\log(1+\text{gap}_i) \sim N(\alpha + \beta * \text{grid}_i, \sigma^2) \\
+\alpha \sim N(0, 50) \\
+\beta \sim N(0, 10) \\
+\sigma \sim Exp(1)
+\end{aligned}
+$$
+
+Another option we could take is to model $gap_i$ with an exponential
+distribution with parameter $\alpha + \beta * \text{grid}_i$
+
+$\beta$ represents the average number of seconds behind the winner for
+each additional grid position. This would be the latent variable we are
+interested in.
+
+To account for the difference in circuit, we can model this relationship
+for each 25 circuits. We can also model this in a hierarchical structure
+to reduce the sensitivity of the prior.
+
+$$
+\begin{aligned}
+\log(1+\text{gap}_{i}) \sim N(\alpha + \beta_j * \text{grid}_i, \sigma^2) \\
+\alpha \sim N(0, 50) \\
+\beta \sim N(\mu, \sigma) \\
+\sigma \sim Exp(1) \\
+\mu_\beta \sim N(0, 10) \\
+\sigma_\beta \sim Exp(1)
+\end{aligned}
+$$
+
+$j$ represents a circuit.
+
+We plan to compute the posterior of this model using MCMC in Stan and
+build credible intervals. After, we will perform diagnostics to evaluate
+the model, such as examining credible interval calibration via
+prediction, performing prior and posterior checks, and examining rank
+plots and trace plots. The results of these steps will determine our
+next steps after, such as debugging any issues, such as slow mixing or
+re-evaluating our model. This will also allow us to determine any
+limitations of our model. After building and checking our model, we will
+interpret our final results to see how grid position relates to the time
+gap and whether this effect varies by circuit.
+
+## Tentative Plan
+
+-   literature review - Shahrukh 
+-   problem formulation - Shahrukh and Khue
+-   data preprocessing - Shahrukh
+-   EDA - Khue
+-   Define two plausible models to test - Shahrukh and Khue (one each)
+-   run model in STAN - Shahrukh
+-   correctness check (software testing) - Shahrukh
+-   credible interval check - Khue
+-   diagnostics and other model evaluation - Khue
+-   model limitations - Khue
+-   interpretation - Shahrukh and Khue
