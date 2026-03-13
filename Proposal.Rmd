@@ -161,19 +161,19 @@ The next step is to define some plausible models to use. A naive
 approach we may take is to assume all circuits have the same effect and
 model just the relationship between the grid position and the time gap.
 Since the time gap is strictly positive, we will model the log of the
-time gap + 1 to account for first place finishes (time gap of 0).
+time gap + 1 to account for first place finishes (time gap of 0). The parameters for the distribution chosen below attempt to cover a wide range of plausible values since we don't know what parameter values are sensical.
 
 $$
 \begin{aligned}
-\log(1+\text{gap}_i) \sim N(\alpha + \beta * \text{grid}_i, \sigma^2) \\
-\alpha \sim N(0, 50) \\
-\beta \sim N(0, 10) \\
-\sigma \sim Exp(1)
+\log(1 + \text{gap}_i) &\sim \mathcal{N}(\alpha + \beta \cdot \text{grid}_i,\ \sigma^2) \\
+\alpha &\sim \mathcal{N}(0, 50) \\
+\beta &\sim \mathcal{N}(0, 10) \\
+\sigma &\sim \text{Exp}(1)
 \end{aligned}
 $$
 
 Another option we could take is to model $gap_i$ with an exponential
-distribution with parameter $\alpha + \beta * \text{grid}_i$
+distribution with parameter $\alpha + \beta * \text{grid}_i$.
 
 $\beta$ represents the average number of seconds behind the winner for
 each additional grid position. This would be the latent variable we are
@@ -183,27 +183,28 @@ To account for the difference in circuit, we can model this relationship
 for each 25 circuits. We can also model this in a hierarchical structure
 to reduce the sensitivity of the prior.
 
+
 $$
 \begin{aligned}
-\log(1+\text{gap}_{i}) \sim N(\alpha + \beta_j * \text{grid}_i, \sigma^2) \\
-\alpha \sim N(0, 50) \\
-\beta \sim N(\mu, \sigma) \\
-\sigma \sim Exp(1) \\
-\mu_\beta \sim N(0, 10) \\
-\sigma_\beta \sim Exp(1)
+\log(1 + \text{gap}_i) &\sim \mathcal{N}(\alpha + \beta_j \cdot \text{grid}_i,\ \sigma^2) \\
+\alpha &\sim \mathcal{N}(0, 50) \\
+\beta_j &\sim \mathcal{N}(\mu_\beta,\ \sigma_\beta) \\
+\sigma &\sim \text{Exp}(1) \\
+\mu_\beta &\sim \mathcal{N}(0, 10) \\
+\sigma_\beta &\sim \text{Exp}(1)
 \end{aligned}
 $$
 
-$j$ represents a circuit.
+$j$ represents a circuit. We may compare the two models to understand the effect circuit has on the time gap.
 
-We plan to compute the posterior of this model using MCMC in Stan and
+We plan to compute the posterior of these models using MCMC in Stan and
 build credible intervals. After, we will perform diagnostics to evaluate
-the model, such as examining credible interval calibration via
+the models, such as examining credible interval calibration via
 prediction, performing prior and posterior checks, and examining rank
 plots and trace plots. The results of these steps will determine our
-next steps after, such as debugging any issues, such as slow mixing or
+next steps, such as debugging slow mixing models or
 re-evaluating our model. This will also allow us to determine any
-limitations of our model. After building and checking our model, we will
+limitations of our models. After building and checking our models, we will
 interpret our final results to see how grid position relates to the time
 gap and whether this effect varies by circuit.
 
@@ -217,6 +218,6 @@ gap and whether this effect varies by circuit.
 -   run model in STAN - Shahrukh
 -   correctness check (software testing) - Shahrukh
 -   credible interval check - Khue
--   diagnostics and other model evaluation - Khue
+-   diagnostics plot and other model evaluation - Khue
 -   model limitations - Khue
 -   interpretation - Shahrukh and Khue
