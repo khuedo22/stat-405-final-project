@@ -23,20 +23,53 @@ library(tidyverse)
 
 full_data <- read.csv("full_data.csv")
 
-# grid vs gap across all circuits
-full_data %>%
+convert_to_seconds <- function(x) {
+  if (is.numeric(x)) return(x)
+  
+  x <- as.character(x)
+  
+  sapply(x, function(val) {
+    # Plain number (no colon)
+    if (grepl("^[+-]?\\d+\\.?\\d*$", val)) {
+      return(as.numeric(val))
+    }
+    
+    # No sign prefix and contains a colon = gap of 0
+    if (!grepl("^[+-]", val) && grepl(":", val)) {
+      return(0)
+    }
+    
+    # Extract sign
+    sign <- ifelse(startsWith(val, "-"), -1, 1)
+    val <- gsub("^[+-]", "", val)
+    
+    parts <- strsplit(val, ":")[[1]]
+    
+    if (length(parts) == 2) {
+      minutes <- as.numeric(parts[1])
+      seconds <- as.numeric(parts[2])
+      return(sign * (minutes * 60 + seconds))
+    } else if (length(parts) == 3) {
+      hours   <- as.numeric(parts[1])
+      minutes <- as.numeric(parts[2])
+      seconds <- as.numeric(parts[3])
+      return(sign * (hours * 3600 + minutes * 60 + seconds))
+    } else {
+      return(NA)
+    }
+  }, USE.NAMES = FALSE)
+}
+full_data <- full_data %>%
+  mutate(gap_seconds = convert_to_seconds(gap), 
+         grid = as.integer(grid)) %>%
   filter(
-    !is.na(gap),           # exclude DNFs
-    gap != "",
     status == "Finished",       # only finishers
     !is.na(grid),
-    grid > 0                    # exclude pit lane starts (grid = 0)
-  ) %>%
-  mutate(
-    gap_seconds = as.numeric(gap),
-    grid = as.integer(grid)
-  ) %>%
-  filter(!is.na(gap_seconds)) %>%
+    grid > 0,                    # exclude pit lane starts (grid = 0)
+    !is.na(gap_seconds))
+  
+# grid vs gap across all circuits
+full_data %>%
   ggplot(aes(x = factor(grid), y = gap_seconds)) +
   geom_boxplot(outlier.alpha = 0.3, fill = "#e10600", color = "white") +
   scale_y_continuous(labels = scales::label_number(suffix = "s")) +
@@ -47,21 +80,20 @@ full_data %>%
   ) +
   theme_minimal()
 
+# grid vs gap across all circuits log transformed
+full_data %>%
+  ggplot(aes(x = factor(grid), y = log(1+gap_seconds))) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#e10600", color = "white") +
+  scale_y_continuous() +
+  labs(
+    title = "Log Gap to Race Winner by Grid Position (2019–2024)",
+    x = "Grid Position",
+    y = "Log(Gap to Winner + 1)"
+  ) +
+  theme_minimal()
 
 # grid vs gap across all circuits scatterplot
 full_data %>%
-  filter(
-    status == "Finished",
-    !is.na(grid),
-    grid > 0,
-    !is.na(gap),
-    gap != ""
-  ) %>%
-  mutate(
-    gap_seconds = as.numeric(gap),
-    grid = as.integer(grid)
-  ) %>%
-  filter(!is.na(gap_seconds)) %>%
   ggplot(aes(x = grid, y = gap_seconds)) +
   geom_point(alpha = 0.5, size = 1.5) +
   scale_x_continuous(breaks = 1:20) +
@@ -77,18 +109,6 @@ full_data %>%
 
 # average gap of each grid by circuit
 full_data %>%
-  filter(
-    status == "Finished",
-    !is.na(grid),
-    grid > 0,
-    !is.na(gap),
-    gap != ""
-  ) %>%
-  mutate(
-    gap_seconds = as.numeric(gap),
-    grid = as.integer(grid)
-  ) %>%
-  filter(!is.na(gap_seconds)) %>%
   group_by(circuit, grid) %>%
   summarise(avg_gap = mean(gap_seconds), .groups = "drop") %>%
   ggplot(aes(x = grid, y = circuit, fill = avg_gap)) +
@@ -108,20 +128,9 @@ full_data %>%
   theme_minimal()
 
 
+
 # grid vs gap for each circuit
 full_data %>%
-  filter(
-    status == "Finished",
-    !is.na(grid),
-    grid > 0,
-    !is.na(gap),
-    gap != ""
-  ) %>%
-  mutate(
-    gap_seconds = as.numeric(gap),
-    grid = as.integer(grid)
-  ) %>%
-  filter(!is.na(gap_seconds)) %>%
   ggplot(aes(x = grid, y = gap_seconds)) +
   geom_point(alpha = 0.4, size = 0.8, color = "#e10600") +
   facet_wrap(~ circuit, ncol = 4) +
@@ -134,20 +143,22 @@ full_data %>%
   ) +
   theme_minimal() 
 
+# grid vs log gap for each circuit
+full_data %>%
+  ggplot(aes(x = grid, y = log(gap_seconds+1))) +
+  geom_point(alpha = 0.4, size = 0.8, color = "#e10600") +
+  facet_wrap(~ circuit, ncol = 4) +
+  scale_x_continuous(breaks = c(1, 10, 20)) +
+  scale_y_continuous() +
+  labs(
+    title = "Grid Position vs Gap to Winner by Circuit (2019–2024)",
+    x = "Grid Position",
+    y = "Log(Gap to Winner + 1)"
+  ) +
+  theme_minimal() 
+
 # grid vs gap by season
 full_data %>%
-  filter(
-    status == "Finished",
-    !is.na(grid),
-    grid > 0,
-    !is.na(gap),
-    gap != ""
-  ) %>%
-  mutate(
-    gap_seconds = as.numeric(gap),
-    grid = as.integer(grid)
-  ) %>%
-  filter(!is.na(gap_seconds)) %>%
   ggplot(aes(x = grid, y = gap_seconds)) +
   geom_point(alpha = 0.4, size = 0.8, color = "#e10600") +
   facet_wrap(~ season, ncol = 4) +
@@ -162,18 +173,6 @@ full_data %>%
 
 # grid vs gap by round
 full_data %>%
-  filter(
-    status == "Finished",
-    !is.na(grid),
-    grid > 0,
-    !is.na(gap),
-    gap != ""
-  ) %>%
-  mutate(
-    gap_seconds = as.numeric(gap),
-    grid = as.integer(grid)
-  ) %>%
-  filter(!is.na(gap_seconds)) %>%
   ggplot(aes(x = grid, y = gap_seconds)) +
   geom_point(alpha = 0.4, size = 0.8, color = "#e10600") +
   facet_wrap(~ round, ncol = 4) +
@@ -185,3 +184,9 @@ full_data %>%
     y = "Gap to Winner (seconds)"
   ) +
   theme_minimal() 
+
+full_data %>%
+  select(grid, gap_seconds) %>%
+  summary()
+
+hist(full_data$gap_seconds)
