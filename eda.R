@@ -129,6 +129,7 @@ full_data %>%
 
 
 
+
 # grid vs gap for each circuit
 full_data %>%
   ggplot(aes(x = grid, y = gap_seconds)) +
@@ -185,8 +186,72 @@ full_data %>%
   ) +
   theme_minimal() 
 
-full_data %>%
+ full_data %>%
   select(grid, gap_seconds) %>%
   summary()
 
 hist(full_data$gap_seconds)
+qqplot(full_data$grid,full_data$gap_seconds)
+qqline(log(full_data$gap_seconds+1))
+qqnorm(log(full_data$gap_seconds+1))
+
+hist(filter(full_data, grid == 4)$gap_seconds)
+
+
+
+
+# Example coefficients
+
+
+# Generate example data (replace with your actual data)
+set.seed(42)
+
+
+# Set your own parameter values
+alpha <- 0.5   # intercept
+beta  <- 0.1   # slope
+
+# Step 1: Compute rate for each grid value from the linear predictor
+params <- tibble(grid = 1:20) |>
+  mutate(rate = alpha + beta * grid)
+
+# Step 2: Build overlay curves
+overlay <- params |>
+  rowwise() |>
+  mutate(
+    x    = list(seq(0, quantile(full_data$gap_seconds[full_data$grid == grid], 0.995), 
+                    length.out = 300)),
+    dens = list(dexp(unlist(x), rate = rate))
+  ) |>
+  unnest(c(x, dens))
+
+ggplot(full_data, aes(x = gap_seconds)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    bins      = 30,
+    fill      = "blue",
+    colour    = "white",
+    linewidth = 0.3
+  ) +
+  geom_line(
+    data      = overlay,
+    aes(x = x, y = dens),
+    colour    = "red",
+    alpha=0.1,
+    linewidth = 0.8
+  ) +
+  facet_wrap(~ grid, scales = "free", ncol = 4,
+             labeller = label_bquote(grid == .(grid))) +
+  labs(
+    x        = "gap_seconds",
+    y        = "density",
+    title    = "gap_seconds by grid position",
+    subtitle = sprintf("Exp(rate = %.2f + %.2f × grid) overlay", alpha, beta)
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    strip.text       = element_text(size = 9, face = "bold"),
+    panel.grid.minor = element_blank(),
+    plot.title       = element_text(face = "bold")
+  )
+hist(log(full_data$gap_seconds+1))
