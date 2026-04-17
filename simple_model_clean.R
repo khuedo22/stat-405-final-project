@@ -119,7 +119,7 @@ N_train = N_obs-1
 
 ci_level = 0.8
 ci_plims = c((1-ci_level)/2, (1+ci_level)/2) # probability limits of the CI
-ci_limits = matrix(0, nrow=50, 2)
+
 
 
 # randomly sample 100 points from the data and set that as the validation since
@@ -217,9 +217,9 @@ mcmc_rank_hist(fit_simple_exp$draws("beta")) + ylab("number of MCMC samples with
 
 # parameters
 alpha_mean = 0
-alpha_sd = 50
+alpha_sd = 5
 beta_mean = 0
-beta_sd = 10
+beta_sd = 2
 
 simulate_data = function() {
   grid = 1:20
@@ -228,9 +228,8 @@ simulate_data = function() {
   beta_sim <- rnorm(1, beta_mean, beta_sd)
   rate = exp(alpha_sim + beta_sim*grid)
   
-  # use your actual grid values from your data
-  # simulate log(1 + gap) ~ N(alpha + beta * grid, sigma)
-  gap_sim <- rexp(n = length(grid), rate=rate)
+  
+  gap_sim <- rexp(n = 1000, rate=rate) # simulate data of size 100
   
 
   
@@ -238,22 +237,18 @@ simulate_data = function() {
   return(data.frame(alpha = alpha_sim, beta=beta_sim, grid=grid, gap=gap_sim))
 }
 
-simulated_data = data.frame()
-for (i in 1:5) {
-  simulated_data = rbind(simulated_data, simulate_data())
-}
-
-
+simulated_data = simulate_data()
 
 validation_obs_debug <- sample(1:nrow(simulated_data), 100, replace = FALSE)
 ci_limits_debug = matrix(0, nrow=100, 2)
 # WARNING: this takes a long time to run
-for(i in 1:100){
+for(i in 1:length(validation_obs_debug)){
+  i_test = validation_obs_debug[i]
   train_test_debug_dta = list(
     N = nrow(simulated_data)-1,
-    grid = simulated_data$grid[-i],
-    gap = simulated_data$gap[-i],
-    grid_pred = simulated_data$grid[i])
+    grid = simulated_data$grid[-i_test],
+    gap = simulated_data$gap[-i_test],
+    grid_pred = simulated_data$grid[i_test])
   mcmc_results_debug = mod_simple_exp$sample(
     seed = 1,
     data = train_test_debug_dta,
@@ -289,7 +284,7 @@ mean(merged_simulated_data$Inside_CI)
 initial_dist_df = data.frame()
 for (i in 1:100) {
   forward_values = simulate_data()
-  initial_dist_df = rbind(initial_dist_df, data.frame(forward_values$alpha, forward_values$beta)
+  initial_dist_df = rbind(initial_dist_df, data.frame(forward_values$alpha, forward_values$beta))
 }
 
 hist(initial_dist_df$forward_values.beta)
@@ -311,9 +306,9 @@ for (i in 1:100) {
     output_dir = "stan_out",
     chains=1,
     iter_warmup = 50,
-    iter_sampling = 100,
-    init = list(list(alpha=forward_values$alpha,
-                     beta=forward_values$beta))
+    iter_sampling = 50,
+    init = list(list(alpha=forward_values$alpha[1],
+                     beta=forward_values$beta[1]))
   )
   final_params <- curr_fit$draws(format = "df") |> 
     tail(1) |>
@@ -384,3 +379,4 @@ gap_preds_df %>%
   coord_fixed(xlim = range(gap_preds_df$true_preds), ylim = range(gap_preds_df$true_preds)) +
   facet_wrap(~ method) +
   theme_minimal()
+

@@ -15,9 +15,12 @@ parameters {
 
 
 model {
-  alpha ~ normal(0, 50);
-  beta ~ normal(0, 10);
-  gap ~ exponential(exp(alpha + beta * grid));
+  alpha ~ normal(0, 5);
+  beta ~ normal(0, 2);
+  
+  for (n in 1:N) {
+    target += exponential_lpdf(gap[n] | exp(alpha + beta * grid[n]));
+  }
 }
 
 generated quantities {
