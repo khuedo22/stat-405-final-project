@@ -19,8 +19,10 @@ transformed parameters {
 }
 
 model {
-  alpha ~ normal(0, 5);
-  beta ~ normal(0, 2);
+  // alpha ~ normal(0, 5);
+  // beta ~ normal(0, 2);
+  alpha ~ normal(-2.5, 1.0);
+  beta ~ normal(-0.5, 0.5);
   
   for (n in 1:N) {
     target += exponential_lpdf(gap[n] | exp(alpha + beta * log_grid[n]));
