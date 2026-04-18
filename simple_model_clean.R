@@ -59,33 +59,35 @@ data <- data %>%
 set.seed(1)
 
 # ========= prior check ================
-
+# distribution of data
 hist(data$gap)
 
 
 
-n_sim <- 8
+n_samples <- 100
+xs <- seq(1, 20, by = 0.1)
 
-# draw alpha and beta from the priors
-alphas <- rnorm(n_sim, 0, 50)
-betas  <- rnorm(n_sim, 0, 10)
+# sample from priors
+alpha_prior <- rnorm(n_samples, 0, 5)
+beta_prior  <- rnorm(n_samples, 0, 2)
 
-# base plot
-plot(data$grid, data$gap, ylab = "Gap", xlab = "Grid Position",
-     pch = 16, col = "black")
+# set up empty plot with range of your actual data
+plot(NULL, xlim = c(1, 20), ylim = range(data$gap),
+     xlab = "grid", ylab = "gap")
 
-# TODO fix later
-# for each pair, simulate gap and plot a smooth line
-grid_seq <- seq(min(data$grid), max(data$grid), length.out = 200)
-
-for (i in 1:n_sim) {
-  rate <- exp(alphas[i] + betas[i] * grid_seq)
-  lines(grid_seq, 1 / rate, col = adjustcolor("steelblue", alpha.f = 0.5), lwd = 1.5)
+# draw prior curves first
+for (i in 1:n_samples) {
+  mean_gap <- exp(-(alpha_prior[i] + beta_prior[i] * log(xs)))
+  lines(xs, mean_gap, col = rgb(0, 0, 0, alpha = 0.05))
 }
+
+# overlay actual data on top
+points(data$grid, data$gap, col = "red", pch = 1, cex = 0.8)
+
 
 
 # ========= running stan ================
-
+N_obs = nrow(data)
 # exponential model
 mod_simple_exp = cmdstan_model("simple_model_exp.stan")
 fit_simple_exp = mod_simple_exp$sample(
@@ -93,13 +95,14 @@ fit_simple_exp = mod_simple_exp$sample(
   chains = 5,
   refresh = 500,
   output_dir = "stan_out",
-  data = list(N = N_obs, grid = data$grid, gap=data$gap, grid_pred=10), # add pred
+  data = list(N = N_obs, 
+              grid = data$grid, 
+              gap=data$gap, 
+              grid_pred=10), # add pred
   iter_warmup = 1000,
   iter_sampling = 1000,
 )
 
-print(fit_simple_exp)
-fit_simple_exp$summary(NULL, c("mean", "sd", "mcse_mean", "ess_bulk"))
 
 fit_exp.variational = mod_simple_exp$variational(
   seed = 1,
@@ -107,8 +110,17 @@ fit_exp.variational = mod_simple_exp$variational(
   output_dir = "stan_out",
   algorithm = "meanfield",
   output_samples = 1000,
-  data = list(N = N_obs, grid = data$grid, gap=data$gap, grid_pred=10)
+  data = list(N = N_obs, 
+              grid = data$grid, 
+              gap=data$gap, 
+              grid_pred=10)
 )
+
+# ========= model summary (ESS and R hat) ================
+
+
+print(fit_simple_exp)
+fit_simple_exp$summary(NULL, c("mean", "sd", "mcse_mean", "ess_bulk"))
 
 print(fit_exp.variational)
 fit_exp.variational$summary(NULL, c("mean", "sd", "mcse_mean", "ess_bulk"))
@@ -122,12 +134,14 @@ ci_plims = c((1-ci_level)/2, (1+ci_level)/2) # probability limits of the CI
 
 
 
-# randomly sample 100 points from the data and set that as the validation since
-# there are over 1000 data points TODO is this a valid method?
+# randomly sample 50 points from the data and set that as the validation since
+# there are over 50 data points TODO is this a valid method?
 
-validation_obs <- sample(1:N_obs, 100, replace = FALSE)
+validation_obs <- sample(1:N_obs, 50, replace = FALSE) 
+# sample 50 to save time
 
-ci_limits_exp = matrix(0, nrow=100, 2)
+all_mcmc_samples <- list()
+ci_limits_exp = matrix(0, nrow=50, 2)
 for(i in 1:length(validation_obs)){
   i_test = validation_obs[i]
   train_test_dta = list(
@@ -144,6 +158,7 @@ for(i in 1:length(validation_obs)){
     chains = 1
   )
   simple_exp_samples = as.vector(mcmc_results$draws("gap_pred"))
+  all_mcmc_samples[[i]] <- as.vector(mcmc_results$draws("gap_pred"))
   ci_limits_exp[i,] = quantile(simple_exp_samples, ci_plims)
 }
 
@@ -162,8 +177,8 @@ merged_data_exp %>%
 mean(merged_data_exp$Inside_CI)
 
 
-
-ci_limits_exp_var = matrix(0, nrow=100, 2)
+all_vi_samples <- list()
+ci_limits_exp_var = matrix(0, nrow=50, 2)
 for(i in 1:length(validation_obs)){
   i_test = validation_obs[i]
   train_test_dta = list(
@@ -181,6 +196,7 @@ for(i in 1:length(validation_obs)){
     output_samples = 1000,
   )
   simple_exp_var_samples = as.vector(mcmc_results$draws("gap_pred"))
+  all_vi_samples[[i]] <- as.vector(mcmc_results$draws("gap_pred"))
   ci_limits_exp_var[i,] = quantile(simple_exp_var_samples, ci_plims)
 }
 
@@ -198,14 +214,68 @@ merged_data_exp_var %>%
 
 mean(merged_data_exp_var$Inside_CI)
 
-# ========= mixing (MCMC method) ================
+# ========= mixing and predictive posterior ================
 
+# trace plots for MH and VI
 mcmc_trace(fit_simple_exp$draws("alpha")) + theme_minimal()
 mcmc_trace(fit_simple_exp$draws("beta")) + theme_minimal() # this is the parameter of interest
+
+mcmc_trace(fit_exp.variational$draws("alpha")) + theme_minimal()
+mcmc_trace(fit_exp.variational$draws("beta")) + theme_minimal()
+
+mcmc_rank_hist(fit_simple_exp$draws("alpha")) + ylab("number of MCMC samples with these ranks") + theme_minimal()
 
 mcmc_rank_hist(fit_simple_exp$draws("beta")) + ylab("number of MCMC samples with these ranks") + theme_minimal()
 
 
+mcmc_rank_hist(fit_exp.variational$draws("alpha")) + ylab("number of MCMC samples with these ranks") + theme_minimal()
+
+mcmc_rank_hist(fit_exp.variational$draws("beta")) + ylab("number of MCMC samples with these ranks") + theme_minimal()
+
+# posterior predictive check
+
+# parameter values
+simple_exp_draws_df <- fit_simple_exp$draws(format = "df")
+
+ggplot(simple_exp_draws_df, 
+       aes(x = alpha, y = beta, color = lp__)) +
+  geom_point(shape = 1, size = 2) +  # shape=1 gives open circles like your plot
+  scale_color_gradient(low = "grey85", high = "purple4") +
+  labs(
+    x = "alpha parameter",
+    y = "beta parameter",
+    color = "log posterior"
+  ) +
+  theme_classic()
+
+
+
+# model against data
+alpha_samples <- simple_exp_draws_df$alpha
+beta_samples <- simple_exp_draws_df$beta
+
+# normalize lp__ to get weights (analogous to norm_weights in your example)
+lp <- simple_exp_draws_df$lp__
+norm_weights <- exp(lp - max(lp))  # stabilize before normalizing
+norm_weights <- norm_weights / sum(norm_weights)
+
+# grid of x values to plot over
+xs <- seq(1, 20)
+
+plot(data$grid, data$gap, xlab = "grid", ylab = "gap")
+
+for (i in 1:nrow(simple_exp_draws_df)) {
+  alpha <- alpha_samples[i]
+  beta  <- beta_samples[i]
+  
+  # mean of exponential is 1/rate
+  mean_gap <- exp(-(alpha + beta * log(xs)))
+  
+  lines(xs, mean_gap, col = rgb(0, 0, 0, alpha = norm_weights[i] * 20))
+}
+
+
+# TODO maybe do the same thing for VI?
 
 
 # ========= debugging ================
@@ -226,15 +296,14 @@ simulate_data = function() {
   # sample parameters from their priors
   alpha_sim <- rnorm(1, alpha_mean, alpha_sd)
   beta_sim <- rnorm(1, beta_mean, beta_sd)
-  rate = exp(alpha_sim + beta_sim*grid)
+  log_grid = log(grid)
+  rate = exp(alpha_sim + beta_sim*log_grid)
+  
+  gap_sim <- as.vector(mapply(function(r) rexp(50, rate = r), rate))
+  grid_rep <- rep(1:20, each = 50)
+  return(data.frame(alpha = alpha_sim, beta = beta_sim, grid = grid_rep, gap = gap_sim))
   
   
-  gap_sim <- rexp(n = 1000, rate=rate) # simulate data of size 100
-  
-
-  
-  
-  return(data.frame(alpha = alpha_sim, beta=beta_sim, grid=grid, gap=gap_sim))
 }
 
 simulated_data = simulate_data()
@@ -284,7 +353,7 @@ mean(merged_simulated_data$Inside_CI)
 initial_dist_df = data.frame()
 for (i in 1:100) {
   forward_values = simulate_data()
-  initial_dist_df = rbind(initial_dist_df, data.frame(forward_values$alpha, forward_values$beta))
+  initial_dist_df = rbind(initial_dist_df, data.frame(forward_values$alpha[1], forward_values$beta[1]))
 }
 
 hist(initial_dist_df$forward_values.beta)
@@ -305,7 +374,7 @@ for (i in 1:100) {
     show_messages = FALSE,
     output_dir = "stan_out",
     chains=1,
-    iter_warmup = 50,
+    iter_warmup = 10,
     iter_sampling = 50,
     init = list(list(alpha=forward_values$alpha[1],
                      beta=forward_values$beta[1]))
@@ -379,4 +448,3 @@ gap_preds_df %>%
   coord_fixed(xlim = range(gap_preds_df$true_preds), ylim = range(gap_preds_df$true_preds)) +
   facet_wrap(~ method) +
   theme_minimal()
-
