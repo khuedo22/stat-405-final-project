@@ -2,3 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
+stan_out_hierarchical/
+stan_out/
