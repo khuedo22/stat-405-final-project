@@ -13,7 +13,40 @@ suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(bayesplot))
 suppressPackageStartupMessages(library(cmdstanr))
+suppressPackageStartupMessages(library(f1dataR))
 ```
+
+```{r load-data-fallback}
+
+## The dataset full_data.csv is included in the repository. 
+##If you need to regenerate it from scratch using the f1dataR package, 
+##use the following code (note this takes a long time to run):
+
+# full_data <- map_dfr(2019:2024, function(year) {
+#   schedule <- load_schedule(season = year)
+#   map_dfr(seq_len(nrow(schedule)), function(round) {
+#     tryCatch(
+#       load_results(season = year, round = round) %>%
+#         mutate(
+#           season = year,
+#           round = round,
+#           race_name = schedule$race_name[round],
+#           circuit = schedule$circuit_id[round],
+#           top_speed_kph = as.numeric(top_speed_kph),
+#           fastest_rank = as.integer(fastest_rank)
+#         ),
+#       error = function(e) {
+#         message("Skipping season ", year, " round ", round, ": ", e$message)
+#         NULL
+#       }
+#     )
+#   })
+# })
+# 
+# write_csv(full_data, "full_data.csv")
+
+```
+
 
 ```{r load-data}
 ## Loading and preprocessing data
@@ -81,7 +114,7 @@ head(data)
 data |>
   count(circuit) |>
   ggplot(aes(x = reorder(circuit, n), y = n)) +
-  geom_bar(stat = "identity", fill = "#a93226") +
+  geom_bar(stat = "identity", fill = "#a93226", color = "white") +
   coord_flip() +
   theme_minimal() +
   labs(
@@ -119,7 +152,8 @@ data |>
 
 dir.create(file.path("stan_out_hierarchical"), showWarnings = FALSE)
 
-grid_pred_pos <- 10
+grid_pred_pos    <- 10
+circuit_pred_pos <- 1
 
 mod_hierarchical <- cmdstan_model("hierarchical_model_exp.stan")
 
@@ -129,12 +163,13 @@ fit_hierarchical <- mod_hierarchical$sample(
   refresh       = 0,
   output_dir    = "stan_out_hierarchical",
   data          = list(
-    N          = N_obs,
-    J          = N_circuits,
-    circuit_id = data$circuit_id,
-    grid       = data$grid,
-    gap        = data$gap,
-    grid_pred  = grid_pred_pos
+    N            = N_obs,
+    J            = N_circuits,
+    circuit_id   = data$circuit_id,
+    grid         = data$grid,
+    gap          = data$gap,
+    grid_pred    = grid_pred_pos,
+    circuit_pred = circuit_pred_pos
   ),
   iter_warmup   = 500,
   iter_sampling = 500
@@ -152,15 +187,16 @@ fit_hierarchical_vi <- mod_hierarchical$variational(
   show_messages    = FALSE,
   show_exceptions  = FALSE,
   output_dir       = "stan_out_hierarchical",
-  algorithm        = "meanfield",
+  algorithm        = "fullrank",
   output_samples   = 1000,
   data             = list(
-    N          = N_obs,
-    J          = N_circuits,
-    circuit_id = data$circuit_id,
-    grid       = data$grid,
-    gap        = data$gap,
-    grid_pred  = grid_pred_pos
+    N            = N_obs,
+    J            = N_circuits,
+    circuit_id   = data$circuit_id,
+    grid         = data$grid,
+    gap          = data$gap,
+    grid_pred    = grid_pred_pos,
+    circuit_pred = circuit_pred_pos
   )
 )
 ```
@@ -173,4 +209,147 @@ fit_hierarchical$summary(NULL, c("mean", "sd", "mcse_mean", "ess_bulk"))
 print(fit_hierarchical_vi)
 fit_hierarchical_vi$summary(NULL, c("mean", "sd", "mcse_mean", "ess_bulk"))
 
+```
+
+```{r calibration-setup}
+# Setup calibration parameters and sample validation observations
+set.seed(1)
+N_train = N_obs - 1
+
+ci_level = 0.8
+ci_plims = c((1 - ci_level) / 2, (1 + ci_level) / 2)
+
+validation_obs <- sample(1:N_obs, 50, replace = FALSE)
+```
+
+```{r calibration-mcmc-loop, warning=FALSE, message=FALSE}
+# MCMC leave-one-out calibration loop over 50 validation observations
+all_mcmc_samples <- list()
+ci_limits_hier = matrix(0, nrow = 50, 2)
+
+for (i in 1:length(validation_obs)) {
+  i_test = validation_obs[i]
+  train_test_dta = list(
+    N            = N_train,
+    J            = N_circuits,
+    circuit_id   = data$circuit_id[-i_test],
+    grid         = data$grid[-i_test],
+    gap          = data$gap[-i_test],
+    grid_pred    = data$grid[i_test],
+    circuit_pred = data$circuit_id[i_test]
+  )
+  mcmc_results = mod_hierarchical$sample(
+    seed             = 1,
+    data             = train_test_dta,
+    output_dir       = "stan_out_hierarchical",
+    refresh          = 0,
+    show_messages    = FALSE,
+    show_exceptions  = FALSE,
+    chains           = 1,
+    iter_warmup      = 500,
+    iter_sampling    = 500
+  )
+  hier_samples           = as.vector(mcmc_results$draws("gap_pred"))
+  all_mcmc_samples[[i]] = as.vector(mcmc_results$draws("gap_pred"))
+  ci_limits_hier[i, ]   = quantile(hier_samples, ci_plims)
+}
+```
+
+```{r calibration-mcmc-plot}
+# MCMC calibration plot showing 80% credible intervals vs observed gaps
+merged_data_hier = data[validation_obs, ] |>
+  bind_cols(data.frame(CI_L = ci_limits_hier[, 1], CI_R = ci_limits_hier[, 2])) |>
+  mutate(Inside_CI = (gap >= CI_L & gap <= CI_R))
+
+merged_data_hier |>
+  ggplot(aes(x = grid, y = gap, ymin = CI_L, ymax = CI_R, color = Inside_CI)) +
+  geom_point() +
+  geom_errorbar() +
+  theme_minimal() +
+  labs(title = "Hierarchical MCMC posterior predictive calibration (80% CI)",
+       x = "Grid Position", y = "Gap to Winner (seconds)")
+
+mean(merged_data_hier$Inside_CI)
+```
+
+```{r calibration-vi-loop, warning=FALSE, message=FALSE}
+# VI leave-one-out calibration loop over 50 validation observations with clipping
+all_vi_samples <- list()
+ci_limits_hier_var = matrix(0, nrow = 50, 2)
+
+for (i in 1:length(validation_obs)) {
+  i_test = validation_obs[i]
+  train_test_dta = list(
+    N            = N_train,
+    J            = N_circuits,
+    circuit_id   = data$circuit_id[-i_test],
+    grid         = data$grid[-i_test],
+    gap          = data$gap[-i_test],
+    grid_pred    = data$grid[i_test],
+    circuit_pred = data$circuit_id[i_test]
+  )
+  vi_results = mod_hierarchical$variational(
+    seed           = 1,
+    data           = train_test_dta,
+    output_dir     = "stan_out_hierarchical",
+    refresh        = 0,
+    show_messages  = FALSE,
+    show_exceptions = FALSE,
+    algorithm      = "fullrank",
+    output_samples = 1000
+  )
+  hier_var_samples        = as.vector(vi_results$draws("gap_pred"))
+  # hier_var_samples        = pmin(hier_var_samples, 500)
+  all_vi_samples[[i]]     = hier_var_samples
+  ci_limits_hier_var[i, ] = quantile(hier_var_samples, ci_plims)
+}
+```
+
+```{r calibration-vi-plot}
+# VI calibration plot showing 80% credible intervals vs observed gaps
+merged_data_hier_var = data[validation_obs, ] |>
+  bind_cols(data.frame(CI_L = ci_limits_hier_var[, 1], CI_R = ci_limits_hier_var[, 2])) |>
+  mutate(Inside_CI = (gap >= CI_L & gap <= CI_R))
+
+merged_data_hier_var |>
+  ggplot(aes(x = grid, y = gap, ymin = CI_L, ymax = CI_R, color = Inside_CI)) +
+  geom_point() +
+  geom_errorbar() +
+  theme_minimal() +
+  labs(x = "Grid", y = "Gap")
+
+mean(merged_data_hier_var$Inside_CI)
+print("end")
+```
+
+```{r trace-mcmc}
+# Trace plots for global and circuit-level parameters to assess MCMC mixing
+dir.create("plots/trace_plots_Hierarchical", recursive = TRUE, showWarnings = FALSE)
+
+p1 <- mcmc_trace(fit_hierarchical$draws("alpha")) +
+  theme_minimal() +
+  labs(title = "Trace plot: alpha (MCMC) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_mcmc_Hierarchical_alpha.png", p1, width = 8, height = 4)
+
+p2 <- mcmc_trace(fit_hierarchical$draws("mu_beta")) +
+  theme_minimal() +
+  labs(title = "Trace plot: mu_beta (MCMC) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_mcmc_Hierarchical_mu_beta.png", p2, width = 8, height = 4)
+
+p3 <- mcmc_trace(fit_hierarchical$draws("sigma_beta")) +
+  theme_minimal() +
+  labs(title = "Trace plot: sigma_beta (MCMC) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_mcmc_Hierarchical_sigma_beta.png", p3, width = 8, height = 4)
+
+p4 <- mcmc_trace(fit_hierarchical$draws("beta_j[1]")) +
+  theme_minimal() +
+  labs(title = "Trace plot: beta_j[1] (MCMC) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_mcmc_Hierarchical_beta_j1.png", p4, width = 8, height = 4)
+
+p5 <- mcmc_trace(fit_hierarchical$draws("beta_j[6]")) +
+  theme_minimal() +
+  labs(title = "Trace plot: beta_j[6] (MCMC) — Hierarchical")
+  ggsave("plots/trace_plots_Hierarchical/trace_mcmc_Hierarchical_beta_j6.png", p5, width = 8, height = 4)
+
+p1; p2; p3; p4; p5
 ```
