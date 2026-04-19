@@ -1,0 +1,176 @@
+---
+title: "hierarchial_model"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(bayesplot))
+suppressPackageStartupMessages(library(cmdstanr))
+```
+
+```{r load-data}
+## Loading and preprocessing data
+
+data <- read.csv("full_data.csv")
+
+convert_to_seconds <- function(x) {
+  if (is.numeric(x)) return(x)
+  x <- as.character(x)
+  sapply(x, function(val) {
+    if (grepl("^[+-]?\\d+\\.?\\d*$", val)) {
+      return(as.numeric(val))
+    }
+    if (!grepl("^[+-]", val) && grepl(":", val)) {
+      return(0)
+    }
+    sign <- ifelse(startsWith(val, "-"), -1, 1)
+    val <- gsub("^[+-]", "", val)
+    parts <- strsplit(val, ":")[[1]]
+    if (length(parts) == 2) {
+      return(sign * (as.numeric(parts[1]) * 60 + as.numeric(parts[2])))
+    } else if (length(parts) == 3) {
+      return(sign * (as.numeric(parts[1]) * 3600 + as.numeric(parts[2]) * 60 + as.numeric(parts[3])))
+    } else {
+      return(NA)
+    }
+  }, USE.NAMES = FALSE)
+}
+
+data <- data %>%
+  mutate(gap = convert_to_seconds(gap),
+         grid = as.integer(grid)) %>%
+  filter(
+    status == "Finished",
+    !is.na(grid),
+    grid > 0,
+    !is.na(gap))
+
+# head(data)
+```
+
+```{r circuit-index}
+## Indexing circuit for stan
+
+circuit_levels <- sort(unique(data$circuit))
+
+data <- data |>
+  mutate(circuit_id = as.integer(factor(circuit, levels = circuit_levels)))
+
+N_circuits <- length(circuit_levels)
+N_obs      <- nrow(data)
+
+cat("Total observations:", N_obs, "\n")
+cat("Number of circuits:", N_circuits, "\n")
+cat("Circuit index range:", min(data$circuit_id), "to", max(data$circuit_id), "\n")
+
+head(data)
+
+# data |> distinct(circuit, circuit_id) |> arrange(circuit_id)
+```
+
+```{r eda-sample-size}
+# Sample size per circuit
+
+data |>
+  count(circuit) |>
+  ggplot(aes(x = reorder(circuit, n), y = n)) +
+  geom_bar(stat = "identity", fill = "#a93226") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Sample size per circuit",
+    x     = "Circuit",
+    y     = "Number of observations"
+  )
+```
+
+```{r eda-heatmap}
+data |>
+  mutate(grid_group = cut(grid, breaks = c(0, 5, 10, 15, 20),
+                          labels = c("1-5", "6-10", "11-15", "16-20"))) |>
+  group_by(circuit, grid_group) |>
+  summarise(median_gap = median(gap), .groups = "drop") |>
+  ggplot(aes(x = grid_group, y = reorder(circuit, median_gap), fill = median_gap)) +
+  geom_tile() +
+  scale_fill_gradientn(
+    colors = c("#00d3ff", "#ffffff", "#e10600"),
+    values = scales::rescale(c(0, 30, 120)),  # adjust midpoint if needed
+    labels = scales::label_number(suffix = "s"),
+    name = "Avg Gap"
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Median gap by circuit and grid position group",
+    x     = "Grid position group",
+    y     = "Circuit",
+    fill  = "Median gap (s)"
+  )
+```
+
+```{r fit-mcmc, warning=FALSE, message=FALSE, results='hide'}
+# hierarchical Stan model and fit using MCMC with 5 chains
+
+dir.create(file.path("stan_out_hierarchical"), showWarnings = FALSE)
+
+grid_pred_pos <- 10
+
+mod_hierarchical <- cmdstan_model("hierarchical_model_exp.stan")
+
+fit_hierarchical <- mod_hierarchical$sample(
+  seed          = 1,
+  chains        = 5,
+  refresh       = 0,
+  output_dir    = "stan_out_hierarchical",
+  data          = list(
+    N          = N_obs,
+    J          = N_circuits,
+    circuit_id = data$circuit_id,
+    grid       = data$grid,
+    gap        = data$gap,
+    grid_pred  = grid_pred_pos
+  ),
+  iter_warmup   = 500,
+  iter_sampling = 500
+)
+
+# print(fit_hierarchical)
+```
+
+```{r fit-vi, warning=FALSE, message=FALSE, results='hide'}
+# hierarchical model using variational inference
+
+fit_hierarchical_vi <- mod_hierarchical$variational(
+  seed             = 1,
+  refresh          = 0,
+  show_messages    = FALSE,
+  show_exceptions  = FALSE,
+  output_dir       = "stan_out_hierarchical",
+  algorithm        = "meanfield",
+  output_samples   = 1000,
+  data             = list(
+    N          = N_obs,
+    J          = N_circuits,
+    circuit_id = data$circuit_id,
+    grid       = data$grid,
+    gap        = data$gap,
+    grid_pred  = grid_pred_pos
+  )
+)
+```
+
+```{r model-summary, warning=FALSE}
+# ========= model summary (ESS and R hat) ================
+print(fit_hierarchical)
+fit_hierarchical$summary(NULL, c("mean", "sd", "mcse_mean", "ess_bulk"))
+
+print(fit_hierarchical_vi)
+fit_hierarchical_vi$summary(NULL, c("mean", "sd", "mcse_mean", "ess_bulk"))
+
+```
