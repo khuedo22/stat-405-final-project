@@ -7,7 +7,11 @@ it from scratch using the `f1dataR` package, use the following code (note this t
 
 ```r
 # Load the pre-compiled dataset containing all seasons (2019–2024)
-# full_data %
+# full_data <- map_dfr(2019:2024, function(year) {
+#   schedule <- load_schedule(season = year)
+#   map_dfr(seq_len(nrow(schedule)), function(round) {
+#     tryCatch(
+#       load_results(season = year, round = round) %>%
 #         mutate(
 #           season = year,
 #           round = round,
@@ -23,5 +27,6 @@ it from scratch using the `f1dataR` package, use the following code (note this t
 #     )
 #   })
 # })
+
 # write_csv(full_data, "full_data.csv")
 ```
