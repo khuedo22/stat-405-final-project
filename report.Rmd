@@ -306,6 +306,8 @@ implemented the workflow established for model development and diagnostics.
 Both partners collaborated by sharing feedback and ensuring consistency
 across modeling approaches and written components.
 
+## Appendix
+
 ### A.1 Gap Distribution
 ![](outputs/gap_hist.png)
 
