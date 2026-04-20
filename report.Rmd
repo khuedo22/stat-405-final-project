@@ -1,0 +1,201 @@
+---
+title: "Effect of Grid Position on Race Time Gap"
+author: "Shahrukh Islam Prithibi (47610068), Khue Do (70790423)"
+date: "2026-04-02"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Github Link
+
+<https://github.com/khuedo22/stat-405-final-project.git>
+
+
+### Background
+
+
+### Literature Review
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC10660124/ 
+The only paper that uses bayesian for f1
+
+### Model 1
+
+For the Bayesian GLM, `gap` is our response and `grid` is our explanatory variable. Our model is describe as is:
+
+$$
+\begin{aligned}
+\alpha \sim \mathcal{N}(tbd, tbd) \\
+\beta \sim \mathcal{N}(tbd, tbd) \\
+\lambda = \exp(\alpha + \beta \times \log(\text{grid}_i)) \\
+\text{gap}_i \sim \text{Exponential}(\lambda)
+\end{aligned}
+$$
+
+Based on [insert figure] in the appendix, `gap` has a right-skewed distribution. Since $\text{gap}_i \in [0, \infty)$, the exponential distribution appears to be the best fit for the likelihood. 
+
+The relationship between `gap` and `grid` appear logarithmic. Therefore, applying a logarithmic transformation to `gap` in the model would capture the data better.
+
+Because the exponential distribution takes rate as a parameter, we need a link function to transform the logarithmic function to a positive number. This gives us the rate parameter to our exponential distribution. As a result, the expected gap value is
+
+$$
+\begin{aligned}
+\mathbb{E}[\text{gap}_i] &= \exp(-\alpha) \times\text{grid}_i^{-\beta} \\
+\end{aligned}
+$$
+
+This means that if the grid position were to double, the expected gap would change by a factor of $2^{-\beta}$.
+
+Since $\alpha$ and $\beta$ can take on real values, a normal distribution was chosen as the prior distribution. The choices for the prior parameters were motivated by EDA. The values of `gap` in our data range from 0 to 50 seconds. Since `grid` takes on discrete values from 1 to 20, we would expect the upper bound
+means we would expect values of alpha and beta to give us gap values that are within this range for grid values from 1-20.
+having a mean of -2.5 for alpha and -0.5 for beta means that on average, gap values would range from ... to ... 
+Alpha and beta values beyond this range (...) would produce gap values that range from ... to ..., which is non-sensical given the context of the problem
+Therefore, we select standard deviation parameters to be ... and .. for alpha and beta respectively.
+One standard deviation away from the mean is approximately 67% of the normal distribution, therefore around 67% of predicted gap values would fall in a sensible range. 
+
+
+#### Diagnostics
+
+This model was implemented by Metropolis Hastings and variational inference. 
+
+insert model results here
+
+We ran 500 iterations for MCMC. The reason for choosing 500 iterations is due to limited computational resources. The trace plots appear mostly random as desired. The rank plots are somewhat uniform, though not as much as ideal. The ESS for $\alpha$ and $\beta$ are 560 and 545, which is larger than the number of iterations. This is indicates that the samples appear mostly i.i.d.
+
+The 80% credible intervals appear well-calibrated for both methods, which indicates that model was approximately well-specified. However, since our dataset is large (~1400 observations), it is also possible that is the result of the Bernstein–von Mises theorem, where for a large number of observations, the likelihood converges to a normal distribution centered at the true parameter, which limits the effect of misspecified priors. For this to hold, the prior should be non-zero around the true parameter, the posterior mean should be consistent, and the model should be parametric.
+
+We simulate data from the prior distribution and run some tests on it. The nominal converage of the credible intervals match the actual coverage for both MH MCMC and VI. However, our dataset is large, which means that this test does not guarantee that the code is bug-free because of the BvM theorem. Therefore, we use the exact invariance test to detect any software bugs. The result from the Kolmogorov-Smirnoff test come back as insignificant, which indicates that we do not have any bugs in our code.
+
+The 5 chains that were initialized show consistent results in the parameter estimates, which indicates that our results are not due to bad luck. 
+
+Comparing MCMC to VI, results are similar. The parameter estimates for $\alpha$ and $\beta$ only differ by ...Both methods appear to have similar behaviour for calibration. Looking at figure ..., the credible intervals are nearly identical.This indicates that the variational distribution found is likely close to the true posterior distribution. 
+
+
+#### Interpretation
+
+The values of $\alpha$ and $\beta$ are ... and ... This means that the higher the grid position is, the further from first place the driver is. It is estimated that when the grid position doubles, the expected time gap increases by a factor of ...This aligns with figure ...
+...
+
+#### Limitations
+
+Because of the large dataset, we performed a modified version of LOOCV to compute the calibration intervals. We randomly sampled 50 observations from our data and for each observation, computed predictions for those using the rest of the data. This was still computationally expensive. The other limitation is the interpretability of the model. Because of the logarithm transformation applied on `grid` and the link function, the parameters were not easily interpretable. There is also a lot of variability in the data. Looking at figure ..., the model was unable to fully fit through all the data points. Incorporating an additional feature might mitigate this.
+
+One improvement that could be made is to design a hierarchical model and put priors on the means and standard deviations. The choice for the mean and standard deviation is largely motivated by inspection, but letting the data dictate the parameter values could have strengthend the fit and resulted in faster mixing.
+
+
+
+### Model 2
+
+#### Diagnostics
+
+#### Limitations
+
+### References
+
+
+### Appendix
+
+##### Model 1 stan
+
+```stan
+data {
+  int<lower=0> N;
+  vector[N] grid;
+  vector[N] gap;
+  int<lower=1, upper=20> grid_pred;
+}
+
+
+// The parameters accepted by the model. Our model
+// accepts two parameters 'mu' and 'sigma'.
+parameters {
+  real alpha;
+  real beta;
+}
+
+transformed parameters {
+  vector[N] log_grid = log(grid);
+  real log_grid_pred = log(grid_pred);
+}
+
+model {
+  // alpha ~ normal(0, 5);
+  // beta ~ normal(0, 2);
+  alpha ~ normal(-2.5, 1.0);
+  beta ~ normal(-0.5, 0.5);
+  
+  for (n in 1:N) {
+    target += exponential_lpdf(gap[n] | exp(alpha + beta * log_grid[n]));
+  }
+}
+
+generated quantities {
+  real gap_pred = exponential_rng(exp(alpha + beta*log_grid_pred));
+}
+```
+
+##### EDA {#eda}
+![](outputs/gap_hist.png)
+
+![](outputs/grid_v_gap.png)
+
+##### Prior Check
+![](outputs/prior_check.png)
+
+##### Mixing
+![](outputs/exp_alpha_trace.png)
+
+![](outputs/exp_alpha_rank.png)
+
+![](outputs/exp_beta_trace.png)
+
+![](outputs/exp_beta_rank.png)
+
+![](outputs/vi_beta_trace.png)
+
+
+##### Calibration
+
+![](outputs/exp_calibration.png)
+
+![](outputs/vi_calibration.png)
+
+##### Debugging
+
+###### Calibration Intervals on Simulated Data
+
+![](outputs/simulated_data_calibration_exp.png)
+
+![](outputs/simulated_data_calibration_vi.png)
+
+
+###### Exact Invariance Test
+
+![](outputs/initial_dist.png)
+
+![](outputs/final_dist.png)
+
+##### Posterior Check
+
+![](outputs/model_against_data_exp.png)
+
+![](outputs/model_against_data_vi.png)
+
+![](outputs/posterior_check_density_exp.png)
+
+![](outputs/posterior_check_density_vi.png)
+
+![](outputs/posterior_check_exp.png)
+
+![](outputs/posterior_check_vi.png)
+
+##### MCMC vs VI
+
+![](outputs/hist_comparison.png)
+
+![](outputs/scatter_plot_comparison.png)
+
+![](outputs/preds_plot_comparison.png)
