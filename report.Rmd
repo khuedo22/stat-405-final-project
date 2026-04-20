@@ -14,15 +14,25 @@ header-includes:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-### Github Link
+## Github Link
 
 <https://github.com/khuedo22/stat-405-final-project.git>
 
 
-### Background
-Formula 1 (F1) is a global motorsport where drivers qualify for a starting grid position before each race, with position 1 (pole position) awarded to the fastest qualifier. We analyse F1 race results from 2019 to 2024, comprising 1,464 finishers across 31 circuits. The response variable is gap_seconds, the finishing time gap to the race winner, and the predictor is grid, the integer starting position from 1 to 20. The key modelling challenges are that the response is strictly non-negative and right-skewed, the grid-gap relationship is nonlinear (Figure X), and gap distributions vary visibly across circuits (Figure X) — motivating both a log transformation of the predictor and a hierarchical model structure.
+## Background
 
-### Problem Formulation
+Formula 1 (F1) is a global motorsport where drivers qualify for a starting
+grid position before each race, with position 1 (pole position) awarded to
+the fastest qualifier. We analyse F1 race results from 2019 to 2024,
+comprising 1,464 finishers across 31 circuits. The response variable is
+`gap_seconds`, the finishing time gap to the race winner, and the predictor
+is `grid`, the integer starting position from 1 to 20. The key modelling
+challenges are that the response is strictly non-negative and right-skewed,
+the grid-gap relationship is nonlinear (**Figure A.2**), and gap distributions
+vary visibly across circuits (**Figure A.4**) — motivating both a log
+transformation of the predictor and a hierarchical model structure.
+
+## Problem Formulation
 We ask two inferential questions: does grid position affect a driver's 
 finishing gap to the race winner, and does this effect vary by circuit? 
 The first question is addressed by Model 1, which estimates a global 
@@ -32,83 +42,82 @@ hierarchical structure. Together the two models allow us to quantify
 both the overall grid effect and the extent of circuit-level 
 heterogeneity in that effect.
 
-### Literature Review
+## Literature Review
 The most closely related work is van Kesteren and Bergkamp (2023), who apply a Bayesian multilevel rank-ordered logit model to F1 race results from the hybrid era (2014–2021) to disentangle driver skill from constructor advantage. They find that approximately 88% of variance in race results is attributable to the constructor, and rank Hamilton and Verstappen as the top drivers of the era. Our work differs in three important ways. First, our research question is distinct: rather than ranking drivers and constructors, we ask whether grid position affects the finishing gap to the winner and whether this effect varies by circuit. Second, our response variable is the continuous time gap to the winner rather than finishing position rank, which motivates an Exponential likelihood rather than a rank-ordered logit. Third, we extend the analysis to 2019–2024 and explicitly model circuit-level heterogeneity in the grid effect through a hierarchical structure, which van Kesteren and Bergkamp do not consider.
 
-### Model 1
+## Model 1
 
-For the Bayesian GLM, `gap` is our response and `grid` is our explanatory variable. Our model is describe as is:
+## Model 1
+
+For the Bayesian GLM, `gap` is our response and `grid` is our explanatory variable:
 
 $$
 \begin{aligned}
-\alpha \sim \mathcal{N}(tbd, tbd) \\
-\beta \sim \mathcal{N}(tbd, tbd) \\
-\lambda = \exp(\alpha + \beta \times \log(\text{grid}_i)) \\
-\text{gap}_i \sim \text{Exponential}(\lambda)
+\alpha &\sim \mathcal{N}(-2.5, 1.0) \\
+\beta &\sim \mathcal{N}(-0.5, 0.5) \\
+\lambda &= \exp(\alpha + \beta \times \log(\text{grid}_i)) \\
+\text{gap}_i &\sim \text{Exponential}(\lambda)
 \end{aligned}
 $$
 
-Based on [insert figure] in the appendix, `gap` has a right-skewed distribution. Since $\text{gap}_i \in [0, \infty)$, the exponential distribution appears to be the best fit for the likelihood. 
+Based on **Figure A.1**, `gap` has a right-skewed distribution. Since $\text{gap}_i \in [0, \infty)$, the exponential distribution appears to be the best fit for the likelihood.
 
-The relationship between `gap` and `grid` appear logarithmic. Therefore, applying a logarithmic transformation to `gap` in the model would capture the data better.
+The relationship between `gap` and `grid` appears logarithmic, as shown in **Figure A.2**. Therefore, applying a logarithmic transformation to `grid` in the model would capture the data better.
 
 Because the exponential distribution takes rate as a parameter, we need a link function to transform the logarithmic function to a positive number. This gives us the rate parameter to our exponential distribution. As a result, the expected gap value is
 
 $$
-\begin{aligned}
-\mathbb{E}[\text{gap}_i] &= \exp(-\alpha) \times\text{grid}_i^{-\beta} \\
-\end{aligned}
+\mathbb{E}[\text{gap}_i] = \exp(-\alpha) \times \text{grid}_i^{-\beta}
 $$
 
 This means that if the grid position were to double, the expected gap would change by a factor of $2^{-\beta}$.
 
-Since $\alpha$ and $\beta$ can take on real values, a normal distribution was chosen as the prior distribution. The choices for the prior parameters were motivated by EDA. The values of `gap` in our data range from 0 to 50 seconds. Since `grid` takes on discrete values from 1 to 20, we would expect the upper bound
-means we would expect values of alpha and beta to give us gap values that are within this range for grid values from 1-20.
-having a mean of -2.5 for alpha and -0.5 for beta means that on average, gap values would range from ... to ... 
-Alpha and beta values beyond this range (...) would produce gap values that range from ... to ..., which is non-sensical given the context of the problem
-Therefore, we select standard deviation parameters to be ... and .. for alpha and beta respectively.
-One standard deviation away from the mean is approximately 67% of the normal distribution, therefore around 67% of predicted gap values would fall in a sensible range. 
+Since $\alpha$ and $\beta$ are real-valued, normal priors were used. Prior parameters were chosen based on the EDA (**Appendix A**): `gap` ranges from 0 to 150 seconds (most observations below 50), and `grid` takes discrete values from 1 to 20. A mean of $-2.5$ for $\alpha$ and $-0.5$ for $\beta$ places 68% of prior mass for $\alpha$ in $[-3.5, -1.5]$ and for $\beta$ in $[-1, 0]$, implying plausible expected gap values of roughly 4 to 662 seconds. Values beyond this range would produce nonsensical gap predictions given the context. The **prior predictive check** (**Figure B.2**) is consistent with this range.
 
 
-#### Diagnostics
+### Diagnostics
 \leavevmode
 
-This model was implemented by Metropolis Hastings and variational inference. 
+This model was implemented by **Metropolis-Hastings MCMC** and **variational inference (VI)**.
 
-insert model results here
+```{r mcmc_results, echo=FALSE}
+read.csv("outputs/summary_exp_df.csv")
+```
 
-We ran 500 iterations for MCMC. The reason for choosing 500 iterations is due to limited computational resources. The trace plots appear mostly random as desired. The rank plots are somewhat uniform, though not as much as ideal. The ESS for $\alpha$ and $\beta$ are 560 and 545, which is larger than the number of iterations. This is indicates that the samples appear mostly i.i.d.
+```{r vi_results, echo=FALSE}
+read.csv("outputs/summary_vi_df.csv")
+```
 
-The 80% credible intervals appear well-calibrated for both methods, which indicates that model was approximately well-specified. However, since our dataset is large (~1400 observations), it is also possible that is the result of the Bernstein–von Mises theorem, where for a large number of observations, the likelihood converges to a normal distribution centered at the true parameter, which limits the effect of misspecified priors. For this to hold, the prior should be non-zero around the true parameter, the posterior mean should be consistent, and the model should be parametric.
+We ran **500 iterations** for MCMC. The reason for choosing 500 iterations is due to limited computational resources. The trace plots (**Figure B.3**) appear mostly random as desired. The rank plots (**Figure B.4**) are somewhat uniform, though not as much as ideal. The ESS for $\alpha$ and $\beta$ are 560 and 545, which is larger than the number of iterations. This indicates that the samples appear mostly i.i.d.
 
-We simulate data from the prior distribution and run some tests on it. The nominal converage of the credible intervals match the actual coverage for both MH MCMC and VI. However, our dataset is large, which means that this test does not guarantee that the code is bug-free because of the BvM theorem. Therefore, we use the exact invariance test to detect any software bugs. The result from the Kolmogorov-Smirnoff test come back as insignificant, which indicates that we do not have any bugs in our code.
+The 80% credible intervals (**Figure B.6**, **B.7**) appear well-calibrated for both methods, which indicates that the model was approximately well-specified. However, since our dataset is large (~1400 observations), it is also possible that this is the result of the **Bernstein–von Mises theorem**, where for a large number of observations, the likelihood converges to a normal distribution centered at the true parameter, which limits the effect of misspecified priors. For this to hold, the prior should be non-zero around the true parameter, the posterior mean should be consistent, and the model should be parametric.
 
-The 5 chains that were initialized show consistent results in the parameter estimates, which indicates that our results are not due to bad luck. 
+We simulate data from the prior distribution and run some tests on it. The nominal coverage of the credible intervals match the actual coverage for both MH MCMC and VI (**Figure B.8**). However, our dataset is large, which means that this test does not guarantee that the code is bug-free because of the BvM theorem. Therefore, we use the exact invariance test to detect any software bugs (**Figure B.9**). The result from the **Kolmogorov–Smirnov** test comes back as insignificant, which indicates that we do not have any bugs in our code.
 
-Comparing MCMC to VI, results are similar. The parameter estimates for $\alpha$ and $\beta$ only differ by ...Both methods appear to have similar behaviour for calibration. Looking at figure ..., the credible intervals are nearly identical.This indicates that the variational distribution found is likely close to the true posterior distribution. 
+The 5 chains that were initialized show consistent results in the parameter estimates (**Figure B.3**), which indicates that our results are not due to bad luck.
 
-
-#### Interpretation
-\leavevmode
-The values of $\alpha$ and $\beta$ are ... and ... This means that the higher the grid position is, the further from first place the driver is. It is estimated that when the grid position doubles, the expected time gap increases by a factor of ...This aligns with figure ...
-...
-
-#### Limitations
-\leavevmode
-
-Because of the large dataset, we performed a modified version of LOOCV to compute the calibration intervals. We randomly sampled 50 observations from our data and for each observation, computed predictions for those using the rest of the data. This was still computationally expensive. The other limitation is the interpretability of the model. Because of the logarithm transformation applied on `grid` and the link function, the parameters were not easily interpretable. There is also a lot of variability in the data. Looking at figure ..., the model was unable to fully fit through all the data points. Incorporating an additional feature might mitigate this.
-
-One improvement that could be made is to design a hierarchical model and put priors on the means and standard deviations. The choice for the mean and standard deviation is largely motivated by inspection, but letting the data dictate the parameter values could have strengthend the fit and resulted in faster mixing.
+Comparing MCMC to VI, results are similar. The parameter estimates for $\alpha$ and $\beta$ only differ by 0.05. Both methods appear to have similar behaviour for calibration. Looking at **Figure B.11**, the credible intervals are nearly identical. This indicates that the variational distribution found is likely close to the true posterior distribution.
 
 
-### Model 2
+### Interpretation
 
-The simple model treats all circuits identically, but the EDA (Figures A.3 and A.4) 
-reveals that both the magnitude of gaps and the strength of the grid effect vary 
-across circuits, and that some circuits have very few observations. To address this, 
-we extend the simple model by allowing each circuit $j$ to have its own grid effect 
-$\beta_j$, drawn from a common population distribution. This partial pooling allows 
-data-sparse circuits to borrow strength from the global distribution while still 
+The values of $\hat{\alpha} = -2.26$ and $\hat{\beta} = -0.70$ (MCMC). This means that the higher the grid position is, the further from first place the driver is. It is estimated that when the grid position doubles, the expected time gap increases by a factor of $2^{0.70} \approx 1.62$. This aligns with **Figure B.10**.
+
+### Limitations
+
+Because of the large dataset, we performed a modified version of LOOCV to compute the calibration intervals. We randomly sampled 50 observations from our data and for each observation, computed predictions for those using the rest of the data. This was still computationally expensive. The other limitation is the interpretability of the model. Because of the logarithm transformation applied on `grid` and the link function, the parameters were not easily interpretable. There is also a lot of variability in the data. Looking at **Figure B.10**, the model was unable to fully fit through all the data points. Incorporating an additional feature might mitigate this.
+
+One improvement that could be made is to design a hierarchical model and put priors on the means and standard deviations. The choice for the mean and standard deviation is largely motivated by inspection, but letting the data dictate the parameter values could have strengthened the fit and resulted in faster mixing.
+
+
+## Model 2
+
+The simple model treats all circuits identically, but the EDA (**Figures A.3** and **A.4**)
+reveals that both the magnitude of gaps and the strength of the grid effect vary
+across circuits, and that some circuits have very few observations. To address this,
+we extend the simple model by allowing each circuit $j$ to have its own grid effect
+$\beta_j$, drawn from a common population distribution. This **partial pooling** allows
+data-sparse circuits to borrow strength from the global distribution while still
 capturing genuine circuit-level variation.
 
 The hierarchical model is specified as:
@@ -124,153 +133,183 @@ $$
 \end{aligned}
 $$
 
-where $j[i]$ denotes the circuit for observation $i$. The prior on $\alpha$ is 
-inherited from Model 1 and motivated by the same EDA. The prior on $\mu_\beta$ 
-is centered at $-0.5$ with standard deviation $0.5$, consistent with the 
-prior on $\beta$ in Model 1, reflecting our expectation that grid position has 
-a modest negative effect on the rate parameter across circuits. The prior on 
-$\sigma_\beta$ is $\text{Exponential}(1)$, which places most mass near zero 
-while allowing for meaningful circuit-level variation if the data supports it; 
+where $j[i]$ denotes the circuit for observation $i$.
+The prior on $\alpha$ is inherited from Model 1 and motivated by the same EDA.
+The prior on $\mu_\beta$ is centered at $-0.5$ with standard deviation $0.5$,
+consistent with the prior on $\beta$ in Model 1, reflecting our expectation that
+grid position has a modest negative effect on the rate parameter across circuits.
+The prior on $\sigma_\beta$ is $\text{Exponential}(1)$, which places most mass
+near zero while allowing for meaningful circuit-level variation if the data supports it;
 this is a standard weakly informative choice for hierarchical scale parameters.
 
-Both MCMC and VI were used to approximate the posterior by minimizing 
-$\text{KL}(q_\phi \| \pi)$, equivalently maximizing the 
-$\text{ELBO}(\phi) = -L(\phi)$. For Model 1, meanfield VI was used as 
-$\alpha$ and $\beta$ are approximately independent in the posterior. For 
-the hierarchical model, fullrank VI was used instead, as $\mu_\beta$, 
-$\sigma_\beta$, and the 31 circuit-specific $\beta_j$'s are strongly 
-correlated, requiring a richer variational family.
+Both **MCMC** and **VI** were used to approximate the posterior by minimizing
+$\text{KL}(q_\phi \| \pi)$, equivalently maximizing the $\text{ELBO}(\phi) = -L(\phi)$.
+For Model 1, **meanfield VI** was used as $\alpha$ and $\beta$ are approximately
+independent in the posterior. For the hierarchical model, **fullrank VI** was used
+instead, as $\mu_\beta$, $\sigma_\beta$, and the 31 circuit-specific $\beta_j$'s
+are strongly correlated, requiring a richer variational family.
 
-#### Diagnostics
-\leavevmode
-This model was implemented using MCMC and fullrank variational inference.
-MCMC was run with 5 chains of 500 iterations each, chosen due to limited
-computational resources. The trace plots (Appendix C.3) for MCMC and (Appendix C.4) 
-for VI appear mostly random as desired and the rank histograms (Appendix C.5) are approximately 
-uniform across all chains, indicating adequate mixing. The ESS ranges from 
-485 for $\alpha$ to 1900 for individual $\beta_j$'s, all larger than the 
-number of iterations, indicating the samples are approximately i.i.d. The 
-5 chains show consistent parameter estimates, indicating the results are 
+```{r hier_mcmc_results, echo=FALSE}
+read.csv("outputs/summary_mcmc_hier_df.csv")
+```
+
+```{r hier_vi_results, echo=FALSE}
+read.csv("outputs/summary_vi_hier_df.csv")
+```
+
+### Diagnostics
+
+This model was implemented using **MCMC** and **fullrank variational inference**.
+MCMC was run with 5 chains of **500 iterations** each, chosen due to limited
+computational resources. The trace plots (**Appendix C.3**) for MCMC and (**Appendix C.4**)
+for VI appear mostly random as desired and the rank histograms (**Appendix C.5**) are approximately
+uniform across all chains, indicating adequate mixing. The ESS ranges from
+485 for $\alpha$ to 1900 for individual $\beta_j$'s, all larger than the
+number of iterations, indicating the samples are approximately i.i.d. The
+5 chains show consistent parameter estimates, indicating the results are
 not due to bad luck.
 
-The 80% credible intervals achieved 84% coverage on held-out data for 
-MCMC (Figure C.6) and 80% for fullrank VI (Figure C.7), both close to the nominal level, indicating 
-the model is approximately well-specified. As with Model 1, however, since 
-our dataset is large (~1400 observations), it is possible that this is 
-partly a result of the Bernstein-von Mises theorem, which limits the 
+The 80% credible intervals achieved **84% coverage** on held-out data for
+MCMC (**Figure C.6**) and **80%** for fullrank VI (**Figure C.7**), both close to the nominal level, indicating
+the model is approximately well-specified. As with Model 1, however, since
+our dataset is large (~1400 observations), it is possible that this is
+partly a result of the **Bernstein–von Mises theorem**, which limits the
 sensitivity of real-data calibration to prior misspecification.
 
-To more rigorously verify correctness,we simulated data from the prior predictive 
-distribution and confirmed that the nominal coverage of the credible 
-intervals matches the actual coverage on synthetic data for both MCMC 
-and VI. As with Model 1, this test alone does not guarantee the code is 
-bug-free due to the BvM theorem. Therefore, we additionally applied the 
-exact invariance test, comparing the initial and final distributions of 
-$\mu_\beta$ via a KS test, yielding $p = 0.37$, providing no evidence 
+To more rigorously verify correctness, we simulated data from the prior predictive
+distribution and confirmed that the nominal coverage of the credible
+intervals matches the actual coverage on synthetic data for both MCMC
+and VI. As with Model 1, this test alone does not guarantee the code is
+bug-free due to the BvM theorem. Therefore, we additionally applied the
+exact invariance test, comparing the initial and final distributions of
+$\mu_\beta$ via a **KS test**, yielding $p = 0.37$, providing no evidence
 of bugs in the implementation.
 
-Comparing MCMC to fullrank VI, the parameter estimates are broadly 
-consistent: $\alpha$ differs by 0.19, $\mu_\beta$ by 0.10, and 
-$\sigma_\beta$ by 0.06. Both methods show similar calibration 
-behaviour, and the credible intervals are nearly identical (Figures C.6 
-and C.7), indicating the variational distribution found is likely close 
+Comparing MCMC to fullrank VI, the parameter estimates are broadly
+consistent: $\alpha$ differs by 0.19, $\mu_\beta$ by 0.10, and
+$\sigma_\beta$ by 0.06. Both methods show similar calibration
+behaviour, and the credible intervals are nearly identical (**Figures C.6**
+and **C.7**), indicating the variational distribution found is likely close
 to the true posterior.
 
-#### Interpretations
-\leavevmode
+### Interpretations
+
 The posterior mean of $\sigma_\beta = 0.09$ is small but clearly nonzero,
 indicating modest but real circuit-level variation in the grid effect.
 The global mean $\mu_\beta = -0.70$ is identical to the pooled $\beta$
 estimate from Model 1, suggesting that on average, the grid effect is
 consistent across circuits. However, the circuit-specific slopes $\beta_j$
-reveal meaningful variation: Sochi has the steepest slope at $-0.81$,
+reveal meaningful variation: **Sochi** has the steepest slope at $-0.81$,
 meaning that doubling the grid position increases the expected gap by a
-factor of $2^{0.81} \approx 1.75$, while Hockenheimring has the flattest
-slope at $-0.58$, corresponding to a factor of only $2^{0.58} \approx
-1.50$. This is physically interpretable: Sochi was a street-style circuit
+factor of $2^{0.81} \approx 1.75$, while **Hockenheimring** has the flattest
+slope at $-0.58$, corresponding to a factor of only $2^{0.58} \approx 1.50$.
+This is physically interpretable: Sochi was a street-style circuit
 where overtaking is difficult and track position is critical, while
 Hockenheimring is a high-speed circuit where overtaking opportunities are
 more frequent.
 
-The shrinkage plot (Figure C.9) shows most slopes pulled toward -0.70, but the degree varies. Sochi, Baku, Zandvoort, and Interlagos move the most as these circuits appear in fewer races, so their naïve estimates are noisier and the model discounts them accordingly. Silverstone and Spa barely move; more data means the model trusts their individual estimates more. That's the point of partial pooling: rather than fitting each circuit from scratch, the model borrows information across circuits and reins in estimates that would otherwise be driven by small samples. We don't throw out circuit-level variation, but you stop treating a three-race sample the same as a fifteen-race one.
+The shrinkage plot (**Figure C.9**) shows most slopes pulled toward $-0.70$,
+but the degree varies. **Sochi**, **Baku**, **Zandvoort**, and **Interlagos**
+move the most as these circuits appear in fewer races, so their naïve
+estimates are noisier and the model discounts them accordingly.
+**Silverstone** and **Spa** barely move; more data means the model trusts
+their individual estimates more. That's the point of partial pooling:
+rather than fitting each circuit from scratch, the model borrows information
+across circuits and reins in estimates that would otherwise be driven by
+small samples. We don't throw out circuit-level variation, but you stop
+treating a three-race sample the same as a fifteen-race one.
 
-#### Limitations
-\leavevmode
-The Exponential likelihood constrains the mean to equal the standard 
-deviation, limiting the model's ability to separately control the spread 
-of predictions. This results in wide credible intervals and both models 
-underestimate spread in the 30-100 second range as seen in the posterior 
-predictive check (Figure C.8). A Gamma likelihood would relax this 
+### Limitations
+
+The Exponential likelihood constrains the mean to equal the standard
+deviation, limiting the model's ability to separately control the spread
+of predictions. This results in wide credible intervals and both models
+underestimate spread in the 30--100 second range as seen in the posterior
+predictive check (**Figure C.8**). A **Gamma likelihood** would relax this
 constraint by introducing a separate shape parameter.
 
-Additionally, $\sigma_\beta = 0.09$ is small, meaning circuit-level 
-variation in the grid effect is modest and the hierarchical model's 
-advantage over the simple model is limited. The model only allows 
-circuit-level variation in the grid effect $\beta_j$ while keeping 
-$\alpha$ fixed across circuits. Allowing circuit-specific intercepts 
-would be a natural extension that could capture additional heterogeneity 
+Additionally, $\sigma_\beta = 0.09$ is small, meaning circuit-level
+variation in the grid effect is modest and the hierarchical model's
+advantage over the simple model is limited. The model only allows
+circuit-level variation in the grid effect $\beta_j$ while keeping
+$\alpha$ fixed across circuits. Allowing circuit-specific intercepts
+would be a natural extension that could capture additional heterogeneity
 in baseline gap levels across circuits.
 
-Finally, the model only considers grid position as a predictor, omitting 
-important factors such as weather conditions, safety car periods, and 
+Finally, the model only considers grid position as a predictor, omitting
+important factors such as weather conditions, safety car periods, and
 constructor performance that are known to influence race gaps.
 
-### Model Comparison
+## Model Comparison
 
-Both models recover a consistent global grid effect: the pooled $\beta = 
--0.70$ from Model 1 matches the hierarchical population mean $\mu_\beta = 
--0.70$ exactly, suggesting that the overall relationship between grid 
+Both models recover a consistent global grid effect: the pooled $\beta =
+-0.70$ from **Model 1** matches the hierarchical population mean $\mu_\beta =
+-0.70$ exactly, suggesting that the overall relationship between grid
 position and finishing gap is stable and well-identified by both models.
 
-The key difference between the models lies in what Model 2 adds. The 
-posterior mean of $\sigma_\beta = 0.09$ confirms that modest but real 
-circuit-level variation exists in the grid effect, which the simple model 
-cannot capture. However, because $\sigma_\beta$ is small, the two models 
-produce similar predictions in practice, as reflected in their calibration 
-performance: MCMC achieves 82% coverage for Model 1 and 84% for Model 2, 
-and VI achieves 80% for both, on the 80% credible intervals.
+The key difference between the models lies in what **Model 2** adds. The
+posterior mean of $\sigma_\beta = 0.09$ confirms that modest but real
+circuit-level variation exists in the grid effect, which the simple model
+cannot capture. However, because $\sigma_\beta$ is small, the two models
+produce similar predictions in practice, as reflected in their calibration
+performance: MCMC achieves **82% coverage** for Model 1 and **84%** for Model 2,
+and VI achieves **80%** for both, on the 80% credible intervals.
 
-The choice of VI method differs meaningfully between the two models. 
-Meanfield VI is appropriate for Model 1 as $\alpha$ and $\beta$ are 
-approximately independent in the posterior. For Model 2, fullrank VI is 
-necessary to capture the strong correlations between $\mu_\beta$, 
-$\sigma_\beta$, and the 31 circuit-specific $\beta_j$'s. This difference 
-illustrates a general principle: as model complexity increases, richer 
-variational families are required to obtain reliable posterior 
+The choice of VI method differs meaningfully between the two models.
+**Meanfield VI** is appropriate for Model 1 as $\alpha$ and $\beta$ are
+approximately independent in the posterior. For Model 2, **fullrank VI** is
+necessary to capture the strong correlations between $\mu_\beta$,
+$\sigma_\beta$, and the 31 circuit-specific $\beta_j$'s. This difference
+illustrates a general principle: as model complexity increases, richer
+variational families are required to obtain reliable posterior
 approximations.
 
-The KS test provides additional insight into model correctness: Model 1 
-yields $p = 0.91$ and Model 2 yields $p = 0.37$, both insignificant, 
-indicating no evidence of bugs in either implementation. The lower 
-p-value for Model 2 reflects the added complexity of the hierarchical 
+The **KS test** provides additional insight into model correctness: Model 1
+yields $p = 0.91$ and Model 2 yields $p = 0.37$, both insignificant,
+indicating no evidence of bugs in either implementation. The lower
+p-value for Model 2 reflects the added complexity of the hierarchical
 structure, which makes the exact invariance test more stringent.
 
-### References
-van Kesteren, E.-J., & Bergkamp, T. (2023). Bayesian analysis of Formula One race results: disentangling driver skill and constructor advantage. *Journal of Quantitative Analysis in Sports*, *19*(4), 273–293. https://doi.org/10.1515/jqas-2022-0021
+## References
 
-### External Resources
-https://jrnold.github.io/bayesian_notes/shrinkage-and-hierarchical-models.html
+van Kesteren, E.-J., & Bergkamp, T. (2023). Bayesian analysis of Formula
+One race results: disentangling driver skill and constructor advantage.
+*Journal of Quantitative Analysis in Sports*, *19*(4), 273–293.
+<https://doi.org/10.1515/jqas-2022-0021>
 
-https://www.statsdirect.com/help/nonparametric_methods/loess.htm
+## External Resources
 
-### Contributions
+<https://jrnold.github.io/bayesian_notes/shrinkage-and-hierarchical-models.html>
 
-This project was a collaborative effort, with both partners contributing to model development, analysis, and written components. 
+<https://www.statsdirect.com/help/nonparametric_methods/loess.htm>
 
-Khue focused on developing the simpler baseline model, including conducting exploratory data analysis (EDA) to inform model design. She designed a structured workflow for model building, diagnostics, and prior/posterior checks, which was later adopted across the project. Khue also wrote the discussion related to the simple model and played a key role in debugging the more complex Stan model.
+## Contributions
 
-Shahrukh was primarily responsible for developing the hierarchical model and writing its corresponding discussion. In addition, he authored the introduction and literature review sections of the report. Shahrukh conducted additional circuit-level EDA to motivate the hierarchical structure and investigated VI convergence issues, ultimately justifying the use of fullrank VI for the hierarchical model. He followed and implemented the workflow established for model development and diagnostics.
+This project was a collaborative effort, with both partners contributing
+to model development, analysis, and written components.
 
-Both partners collaborated by sharing feedback and ensuring consistency across modeling approaches and written components.
+**Khue** focused on developing the simpler baseline model, including
+conducting exploratory data analysis (EDA) to inform model design. She
+designed a structured workflow for model building, diagnostics, and
+prior/posterior checks, which was later adopted across the project. Khue
+also wrote the discussion related to the simple model and played a key
+role in debugging the more complex Stan model.
 
-## Appendix A — EDA
+**Shahrukh** was primarily responsible for developing the hierarchical
+model and writing its corresponding discussion. In addition, he authored
+the introduction and literature review sections of the report. Shahrukh
+conducted additional circuit-level EDA to motivate the hierarchical
+structure and investigated VI convergence issues, ultimately justifying
+the use of fullrank VI for the hierarchical model. He followed and
+implemented the workflow established for model development and diagnostics.
+
+Both partners collaborated by sharing feedback and ensuring consistency
+across modeling approaches and written components.
 
 ### A.1 Gap Distribution
-
 ![](outputs/gap_hist.png)
 
 ### A.2 Relationship between Grid and Gap
-
 ![](outputs/grid_v_gap.png)
 ![](outputs/loess.png)
 ![](outputs/heatmap.png)
@@ -352,6 +391,8 @@ VI
 ### B.9 Exact Invariance Test
 
 ![](outputs/initial_dist.png)
+Final
+
 ![](outputs/final_dist.png)
 
 ### B.10 Posterior Predictive Check
