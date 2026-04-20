@@ -768,3 +768,25 @@ ggsave("plots/comparison_Hierarchical/mcmc_vi_histogram_Hierarchical.png",
 h1
 ```
 
+```{r save-summaries}
+# Save MCMC and VI summary tables for key parameters to outputs folder
+dir.create(file.path("outputs"), showWarnings = FALSE)
+
+summary_mcmc_df <- fit_hierarchical$summary(NULL, c("mean", "sd", "rhat", "mcse_mean", "ess_bulk"))
+summary_mcmc_df <- summary_mcmc_df[summary_mcmc_df$variable %in% c("alpha", "mu_beta", "sigma_beta"), ]
+write.csv(summary_mcmc_df, "outputs/summary_mcmc_hier_df.csv", row.names = FALSE)
+
+summary_vi_df <- fit_hierarchical_vi$summary(NULL, c("mean", "sd", "mcse_mean", "ess_bulk"))
+summary_vi_df <- summary_vi_df[summary_vi_df$variable %in% c("alpha", "mu_beta", "sigma_beta"), ]
+write.csv(summary_vi_df, "outputs/summary_vi_hier_df.csv", row.names = FALSE)
+```
+
+```{r read-summaries}
+# Read and display saved summary tables
+summary_mcmc_hier <- read.csv("outputs/summary_mcmc_hier_df.csv")
+summary_vi_hier   <- read.csv("outputs/summary_vi_hier_df.csv")
+
+summary_mcmc_hier
+summary_vi_hier
+```
+
