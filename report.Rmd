@@ -49,30 +49,24 @@ The most closely related work is van Kesteren and Bergkamp (2023), who apply a B
 
 ## Model 1
 
-For the Bayesian GLM, `gap` is our response and `grid` is our explanatory variable:
+From **Figure A.1**, `gap` is right-skewed with support $[0, \infty)$, motivating an exponential likelihood. The relationship between `gap` and `grid` appears logarithmic, as shown in **Figure A.2**, so we apply a log transformation to `grid`. Since $\lambda$ must be positive, we use an exponential link function, giving the expected gap as
 
 $$
 \begin{aligned}
-\alpha &\sim \mathcal{N}(-2.5, 1.0) \\
-\beta &\sim \mathcal{N}(-0.5, 0.5) \\
-\lambda &= \exp(\alpha + \beta \times \log(\text{grid}_i)) \\
-\text{gap}_i &\sim \text{Exponential}(\lambda)
+\mathbb{E}[\text{gap}_i] &= \exp(-\alpha) \times\text{grid}_i^{-\beta} \\
 \end{aligned}
-$$
-
-Based on **Figure A.1**, `gap` has a right-skewed distribution. Since $\text{gap}_i \in [0, \infty)$, the exponential distribution appears to be the best fit for the likelihood.
-
-The relationship between `gap` and `grid` appears logarithmic, as shown in **Figure A.2**. Therefore, applying a logarithmic transformation to `grid` in the model would capture the data better.
-
-Because the exponential distribution takes rate as a parameter, we need a link function to transform the logarithmic function to a positive number. This gives us the rate parameter to our exponential distribution. As a result, the expected gap value is
-
-$$
-\mathbb{E}[\text{gap}_i] = \exp(-\alpha) \times \text{grid}_i^{-\beta}
 $$
 
 This means that if the grid position were to double, the expected gap would change by a factor of $2^{-\beta}$.
 
-Since $\alpha$ and $\beta$ are real-valued, normal priors were used. Prior parameters were chosen based on the EDA (**Appendix A**): `gap` ranges from 0 to 150 seconds (most observations below 50), and `grid` takes discrete values from 1 to 20. A mean of $-2.5$ for $\alpha$ and $-0.5$ for $\beta$ places 68% of prior mass for $\alpha$ in $[-3.5, -1.5]$ and for $\beta$ in $[-1, 0]$, implying plausible expected gap values of roughly 4 to 662 seconds. Values beyond this range would produce nonsensical gap predictions given the context. The **prior predictive check** (**Figure B.2**) is consistent with this range.
+Since $\alpha$ and $\beta$ are real-valued, normal priors were used. Prior parameters were chosen based on the **Appendix A**: `gap` ranges from 0 to 150 seconds (most observations below 50), and `grid` takes discrete values from 1 to 20.
+
+$\alpha \sim \mathcal{N}(-2.5, 1.0)$, $\beta \sim \mathcal{N}(-0.5, 0.5)$
+
+This places 68% of prior mass for $\alpha$ in $[-3.5, -1.5]$ and for $\beta$ in $[-1, 0]$, implying plausible expected gap values of roughly 4 to 662 seconds. The prior predictive check is consistent with this range.
+
+
+
 
 
 ### Diagnostics
@@ -88,26 +82,32 @@ read.csv("outputs/summary_exp_df.csv")
 read.csv("outputs/summary_vi_df.csv")
 ```
 
-We ran **500 iterations** for MCMC. The reason for choosing 500 iterations is due to limited computational resources. The trace plots (**Figure B.3**) appear mostly random as desired. The rank plots (**Figure B.4**) are somewhat uniform, though not as much as ideal. The ESS for $\alpha$ and $\beta$ are 560 and 545, which is larger than the number of iterations. This indicates that the samples appear mostly i.i.d.
 
-The 80% credible intervals (**Figure B.6**, **B.7**) appear well-calibrated for both methods, which indicates that the model was approximately well-specified. However, since our dataset is large (~1400 observations), it is also possible that this is the result of the **Bernstein–von Mises theorem**, where for a large number of observations, the likelihood converges to a normal distribution centered at the true parameter, which limits the effect of misspecified priors. For this to hold, the prior should be non-zero around the true parameter, the posterior mean should be consistent, and the model should be parametric.
+All 5 chains produced consistent parameter estimates, suggesting results are robust to initialization (**Figure B.3**). Due to limited computational resources, 500 iterations were run for MCMC and 1000 for VI. The  trace plots (**Figure B.3**) for both parameters appear sufficiently random, and the rank plots for MCMC are approximately uniform. ESS for MCMC is 560 ($\alpha$) and 545 ($\beta$), both exceeding the iteration count, indicating near-i.i.d. samples. For VI, ESS is 975 ($\alpha$) and 1142 ($\beta$); the lower ESS for $\alpha$ suggests mild correlation between samples.
 
-We simulate data from the prior distribution and run some tests on it. The nominal coverage of the credible intervals match the actual coverage for both MH MCMC and VI (**Figure B.8**). However, our dataset is large, which means that this test does not guarantee that the code is bug-free because of the BvM theorem. Therefore, we use the exact invariance test to detect any software bugs (**Figure B.9**). The result from the **Kolmogorov–Smirnov** test comes back as insignificant, which indicates that we do not have any bugs in our code.
 
-The 5 chains that were initialized show consistent results in the parameter estimates (**Figure B.3**), which indicates that our results are not due to bad luck.
+Full LOOCV over the entire dataset is computationally prohibitive, so we instead randomly sample 50 observations and for each, build the posterior on the remaining data and predict the held-out observation.
 
-Comparing MCMC to VI, results are similar. The parameter estimates for $\alpha$ and $\beta$ only differ by 0.05. Both methods appear to have similar behaviour for calibration. Looking at **Figure B.11**, the credible intervals are nearly identical. This indicates that the variational distribution found is likely close to the true posterior distribution.
+The 80% credible intervals (**Figure B.6**, **B.7**) are well-calibrated for both methods: actual coverage is 0.82 (MCMC) and 0.80 (VI), suggesting the model is approximately well-specified. However, given the large dataset (~1400 observations), this may partly reflect the **Bernstein–von Mises theorem**, where the likelihood dominates the prior and the posterior converges to a normal distribution centred at the true parameter, reducing the impact of prior misspecification. The conditions for BvM are a non-zero prior near the truth, consistent posterior mean, and a parametric model, which are all plausibly satisfied here.
+
+We also simulate data from the prior and apply the same calibration procedure. Nominal and actual coverage agree for both methods, as seen in (**Figure B.8**). Because of the large dataset, BvM may mask bugs in this test, so we additionally apply the exact invariance test (**Figure B.9**). The Kolmogorov–Smirnov test is non-significant, providing no evidence of software errors.
+
+
+The posterior predictive distribution aligns reasonably well with the data **Figure B.10**, though there is a peak between 50–100 seconds that the model cannot fully capture. MCMC parameter estimates are concentrated near the posterior mean, with a modest linear relationship between $\alpha$ and $\beta$; the model does not appear unidentifiable. VI shows less variability in parameter estimates and no clear $\alpha$–$\beta$ relationship.
+
+MCMC and VI estimates for $\alpha$ and $\beta$ differ by at most 0.05, and both methods show similar calibration behaviour, as seen in **Figure B.11**. Observations missed by one method are generally missed by the other, suggesting VI is a close approximation to the true posterior — consistent with the similar predictive distributions shown in the comparison plots.
 
 
 ### Interpretation
 
-The values of $\hat{\alpha} = -2.26$ and $\hat{\beta} = -0.70$ (MCMC). This means that the higher the grid position is, the further from first place the driver is. It is estimated that when the grid position doubles, the expected time gap increases by a factor of $2^{0.70} \approx 1.62$. This aligns with **Figure B.10**.
+The posterior means are $\hat{\alpha}=-2.26$ and $\hat{\beta}=-0.70$ (MCMC). A higher grid position corresponds to a larger time gap behind the leader. When grid position doubles, the expected gap increases by a factor of $2^{0.70} \approx 1.62$, consistent with the observed data in **Figure B.10**. Drivers starting from lower grid positions (closer to pole) tend to finish with smaller time gaps.
 
 ### Limitations
 
-Because of the large dataset, we performed a modified version of LOOCV to compute the calibration intervals. We randomly sampled 50 observations from our data and for each observation, computed predictions for those using the rest of the data. This was still computationally expensive. The other limitation is the interpretability of the model. Because of the logarithm transformation applied on `grid` and the link function, the parameters were not easily interpretable. There is also a lot of variability in the data. Looking at **Figure B.10**, the model was unable to fully fit through all the data points. Incorporating an additional feature might mitigate this.
+The log transformation on `grid` and the exponential link make $\alpha$ and $\beta$ difficult to interpret directly. Reparameterising as $\lambda=\frac{1}{\exp(\alpha+\beta \times \log(\text{grid}_i))}$ would allow direct interpretation of both parameters. The model also struggles with the substantial variability in `gap`, shown iin **Figure B.10**. Since the variance of an exponential is tied to its mean, the model's capacity to capture heteroscedasticity is limited. Adding a second covariate could improve fit.
 
-One improvement that could be made is to design a hierarchical model and put priors on the means and standard deviations. The choice for the mean and standard deviation is largely motivated by inspection, but letting the data dictate the parameter values could have strengthened the fit and resulted in faster mixing.
+
+One improvement that could be made is to design a hierarchical model and put priors on the means and standard deviations. The choice for the mean and standard deviation is largely motivated by inspection, but letting the data dictate the parameter values could have strengthened the fit.
 
 
 ## Model 2
