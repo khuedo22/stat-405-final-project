@@ -108,6 +108,15 @@ head(data)
 # data |> distinct(circuit, circuit_id) |> arrange(circuit_id)
 ```
 
+```{r circuit-id-name}
+mapping <- data.frame(
+  circuit_id = seq_along(circuit_levels),
+  circuit = circuit_levels
+)
+
+head(mapping)
+```
+
 ```{r eda-sample-size}
 # Sample size per circuit
 
@@ -342,10 +351,10 @@ merged_data_hier_var |>
   geom_point() +
   geom_errorbar() +
   theme_minimal() +
-  labs(x = "Grid", y = "Gap")
+  labs(title = "Hierarchical VI posterior predictive calibration (80% CI)",
+x = "Grid Position", y = "Gap to Winner (seconds)")
 
 mean(merged_data_hier_var$Inside_CI)
-print("end")
 ```
 
 ```{r trace-mcmc}
@@ -689,23 +698,14 @@ ggsave("plots/comparison_Hierarchical/mcmc_vi_comparison_Hierarchical.png",
 
 c1
 ```
+
 ```{r shrinkage-plot}
 # Shrinkage plot showing partial pooling of circuit-specific slopes towards population mean
 dir.create("plots/shrinkage_Hierarchical", recursive = TRUE, showWarnings = FALSE)
 
-# get posterior means of beta_j for each circuit
 beta_j_means <- fit_hierarchical$summary(
   paste0("beta_j[", 1:N_circuits, "]"), "mean"
 )
-
-# get raw unpooled beta per circuit (simple linear regression per circuit)
-unpooled_betas <- data |>
-  group_by(circuit, circuit_id) |>
-  summarise(
-    unpooled_beta = coef(lm(gap ~ log(grid)))[2],
-    .groups = "drop"
-  ) |>
-  arrange(circuit_id)
 
 shrinkage_df <- data.frame(
   circuit    = circuit_levels,
@@ -720,14 +720,23 @@ s2 <- ggplot(shrinkage_df) +
                    yend = reorder(circuit, pooled)),
                arrow = arrow(length = unit(0.2, "cm")),
                color = "#2b2b2b") +
-  geom_point(aes(x = unpooled, y = reorder(circuit, pooled)),
+  geom_point(aes(x = unpooled, y = reorder(circuit, pooled),
+                 shape = "Naive pooled beta"),
              color = "#2b2b2b", size = 2) +
-  geom_point(aes(x = pooled, y = reorder(circuit, pooled)),
+  geom_point(aes(x = pooled, y = reorder(circuit, pooled),
+                 shape = "Hierarchical beta_j"),
              color = "#a93226", size = 2) +
+  scale_shape_manual(
+    name   = "",
+    values = c("Naive pooled beta" = 16, "Hierarchical beta_j" = 16),
+    guide  = guide_legend(override.aes = list(
+      color = c("#2b2b2b", "#a93226")
+    ))
+  ) +
   geom_vline(xintercept = mean(beta_j_means$mean),
              linetype = "dashed", color = "#a93226") +
   theme_minimal() +
-  labs(title = "Shrinkage plot: unpooled vs pooled circuit slopes — Hierarchical",
+  labs(title = "Shrinkage plot: naive pooled vs hierarchical circuit slopes",
        x     = "Beta (grid effect)",
        y     = "Circuit")
 
@@ -737,4 +746,25 @@ ggsave("plots/shrinkage_Hierarchical/shrinkage_plot_Hierarchical.png",
 s2
 ```
 
+```{r mcmc-vi-histogram}
+# Overlay histogram of MCMC and VI gap predictions from last LOO-CV fold
+hier_mcmc_samples <- all_mcmc_samples[[50]]
+hier_vi_samples   <- all_vi_samples[[50]]
+
+h1 <- data.frame(
+  mcmc = hier_mcmc_samples,
+  vi   = hier_vi_samples
+) |>
+  pivot_longer(cols = everything(), names_to = "method", values_to = "gap_preds") |>
+  ggplot(aes(x = gap_preds, fill = method)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 30) +
+  theme_minimal() +
+  labs(title = "Posterior predictive distributions — Hierarchical",
+       x = "Gap predictions (seconds)", y = "Count")
+
+ggsave("plots/comparison_Hierarchical/mcmc_vi_histogram_Hierarchical.png",
+       h1, width = 8, height = 5)
+
+h1
+```
 
