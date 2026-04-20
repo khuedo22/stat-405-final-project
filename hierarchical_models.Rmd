@@ -147,6 +147,32 @@ data |>
   )
 ```
 
+```{r prior-predictive-check}
+# Prior predictive check for hierarchical model showing circuit-level variation
+n_samples  <- 100
+xs         <- seq(1, 20, by = 0.1)
+
+alpha_prior      <- rnorm(n_samples, -2.5, 1.0)
+mu_beta_prior    <- rnorm(n_samples, -0.5, 0.5)
+sigma_beta_prior <- rexp(n_samples, 1)
+
+plot(NULL, xlim = c(1, 20), ylim = range(data$gap),
+     xlab = "Grid", ylab = "Gap",
+     main = "Prior predictive check — Hierarchical")
+
+for (i in 1:n_samples) {
+  # sample circuit-specific beta from hierarchical prior
+  beta_j_i <- rnorm(N_circuits, mu_beta_prior[i], sigma_beta_prior[i])
+  # plot one curve per circuit
+  for (j in 1:N_circuits) {
+    mean_gap <- exp(-(alpha_prior[i] + beta_j_i[j] * log(xs)))
+    lines(xs, mean_gap, col = rgb(0, 0, 0, alpha = 0.02))
+  }
+}
+
+points(data$grid, data$gap, col = "#a93226", pch = 1, cex = 0.8)
+```
+
 ```{r fit-mcmc, warning=FALSE, message=FALSE, results='hide'}
 # hierarchical Stan model and fit using MCMC with 5 chains
 
@@ -353,3 +379,362 @@ p5 <- mcmc_trace(fit_hierarchical$draws("beta_j[6]")) +
 
 p1; p2; p3; p4; p5
 ```
+
+```{r trace-vi}
+# Trace plots for global and circuit-level parameters to assess VI mixing
+p6 <- mcmc_trace(fit_hierarchical_vi$draws("alpha")) +
+  theme_minimal() +
+  labs(title = "Trace plot: alpha (VI) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_vi_Hierarchical_alpha.png", p6, width = 8, height = 4)
+
+p7 <- mcmc_trace(fit_hierarchical_vi$draws("mu_beta")) +
+  theme_minimal() +
+  labs(title = "Trace plot: mu_beta (VI) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_vi_Hierarchical_mu_beta.png", p7, width = 8, height = 4)
+
+p8 <- mcmc_trace(fit_hierarchical_vi$draws("sigma_beta")) +
+  theme_minimal() +
+  labs(title = "Trace plot: sigma_beta (VI) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_vi_Hierarchical_sigma_beta.png", p8, width = 8, height = 4)
+
+p9 <- mcmc_trace(fit_hierarchical_vi$draws("beta_j[1]")) +
+  theme_minimal() +
+  labs(title = "Trace plot: beta_j[1] (VI) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_vi_Hierarchical_beta_j1.png", p9, width = 8, height = 4)
+
+p10 <- mcmc_trace(fit_hierarchical_vi$draws("beta_j[6]")) +
+  theme_minimal() +
+  labs(title = "Trace plot: beta_j[6] (VI) — Hierarchical")
+ggsave("plots/trace_plots_Hierarchical/trace_vi_Hierarchical_beta_j6.png", p10, width = 8, height = 4)
+
+p6; p7; p8; p9; p10
+```
+```{r rank-histograms-mcmc}
+# Rank histograms for MCMC to assess uniform mixing across chains
+dir.create("plots/rank_histograms_Hierarchical", recursive = TRUE, showWarnings = FALSE)
+
+r1 <- mcmc_rank_hist(fit_hierarchical$draws("alpha")) +
+  ylab("Number of MCMC samples with these ranks") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Rank histogram: alpha (MCMC) — Hierarchical")
+ggsave("plots/rank_histograms_Hierarchical/rank_mcmc_Hierarchical_alpha.png", r1, width = 8, height = 4)
+
+r2 <- mcmc_rank_hist(fit_hierarchical$draws("mu_beta")) +
+  ylab("Number of MCMC samples with these ranks") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Rank histogram: mu_beta (MCMC) — Hierarchical")
+ggsave("plots/rank_histograms_Hierarchical/rank_mcmc_Hierarchical_mu_beta.png", r2, width = 8, height = 4)
+
+r3 <- mcmc_rank_hist(fit_hierarchical$draws("sigma_beta")) +
+  ylab("Number of MCMC samples with these ranks") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Rank histogram: sigma_beta (MCMC) — Hierarchical")
+ggsave("plots/rank_histograms_Hierarchical/rank_mcmc_Hierarchical_sigma_beta.png", r3, width = 8, height = 4)
+
+r4 <- mcmc_rank_hist(fit_hierarchical$draws("beta_j[1]")) +
+  ylab("Number of MCMC samples with these ranks") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Rank histogram: beta_j[1] (MCMC) — Hierarchical")
+ggsave("plots/rank_histograms_Hierarchical/rank_mcmc_Hierarchical_beta_j1.png", r4, width = 8, height = 4)
+
+r5 <- mcmc_rank_hist(fit_hierarchical$draws("beta_j[6]")) +
+  ylab("Number of MCMC samples with these ranks") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Rank histogram: beta_j[6] (MCMC) — Hierarchical")
+ggsave("plots/rank_histograms_Hierarchical/rank_mcmc_Hierarchical_beta_j6.png", r5, width = 8, height = 4)
+
+r1; r2; r3; r4; r5
+```
+
+```{r posterior-scatter}
+# Posterior scatter plot of alpha vs mu_beta colored by log posterior
+dir.create("plots/posterior_Hierarchical", recursive = TRUE, showWarnings = FALSE)
+
+hier_draws_df <- fit_hierarchical$draws(format = "df")
+
+s1 <- ggplot(hier_draws_df,
+       aes(x = alpha, y = mu_beta, color = lp__)) +
+  geom_point(shape = 1, size = 2) +
+  scale_color_gradient(low = "grey85", high = "purple4") +
+  labs(
+    title = "Posterior scatter: alpha vs mu_beta — Hierarchical",
+    x     = "alpha parameter",
+    y     = "mu_beta parameter",
+    color = "log posterior"
+  ) +
+  theme_classic()
+ggsave("plots/posterior_Hierarchical/posterior_scatter_Hierarchical.png", s1, width = 8, height = 6)
+
+s1
+```
+
+```{r ppc}
+# Posterior predictive check — observed vs predicted gap density
+dir.create("plots/ppc_Hierarchical", recursive = TRUE, showWarnings = FALSE)
+
+plot(density(data$gap),
+     main = "Posterior predictive check — Hierarchical",
+     xlab = "Gap to Winner (seconds)",
+     col  = "#2b2b2b", lwd = 2,
+     ylim = c(0, 0.03))
+
+for (i in sample(1:nrow(hier_draws_df), 50)) {
+  rate_pred <- exp(hier_draws_df$alpha[i] +
+                   hier_draws_df$mu_beta[i] * log(data$grid))
+  gap_pred  <- rexp(nrow(data), rate = rate_pred)
+  lines(density(gap_pred), col = adjustcolor("#a93226", alpha.f = 0.2))
+}
+
+legend("topright",
+       legend = c("Observed", "Predicted"),
+       col    = c("#2b2b2b", "#a93226"),
+       lwd    = 2)
+```
+
+```{r posterior-curves}
+# Posterior mean curves overlaid on observed data weighted by log posterior
+lp           <- hier_draws_df$lp__
+norm_weights <- exp(lp - max(lp))
+norm_weights <- norm_weights / sum(norm_weights)
+norm_weights <- norm_weights / max(norm_weights)  # scale to [0,1]
+
+xs <- seq(1, 20)
+
+plot(data$grid, data$gap, xlab = "Grid", ylab = "Gap",
+     main = "Posterior curves — Hierarchical")
+
+for (i in 1:nrow(hier_draws_df)) {
+  alpha    <- hier_draws_df$alpha[i]
+  mu_beta  <- hier_draws_df$mu_beta[i]
+  mean_gap <- exp(-(alpha + mu_beta * log(xs)))
+  lines(xs, mean_gap, col = rgb(0, 0, 0, alpha = norm_weights[i] * 0.5))
+}
+```
+
+```{r synthetic-calibration-setup}
+# Simulate synthetic hierarchical F1 gap data from prior predictive distribution
+alpha_mean = -2.5
+alpha_sd   = 1
+beta_mean  = -0.5
+beta_sd    = 0.5
+
+simulate_data_hier = function(n_circuits = 5, n_per_grid = 10) {
+  alpha_sim      <- rnorm(1, alpha_mean, alpha_sd)
+  mu_beta_sim    <- rnorm(1, beta_mean, beta_sd)
+  sigma_beta_sim <- rexp(1, 1)
+  beta_j_sim     <- rnorm(n_circuits, mu_beta_sim, sigma_beta_sim)
+  
+  grid_rep    <- rep(rep(1:20, each = n_per_grid), n_circuits)
+  circuit_rep <- rep(1:n_circuits, each = 20 * n_per_grid)
+  
+  rate    <- exp(alpha_sim + beta_j_sim[circuit_rep] * log(grid_rep))
+  gap_sim <- rexp(length(rate), rate = rate)
+  
+  return(data.frame(
+    alpha      = alpha_sim,
+    mu_beta    = mu_beta_sim,
+    sigma_beta = sigma_beta_sim,
+    grid       = grid_rep,
+    gap        = gap_sim,
+    circuit_id = circuit_rep
+  ))
+}
+```
+
+```{r synthetic-calibration-loop, warning=FALSE, message=FALSE}
+# Calibration loop on synthetic data to verify model recovers true parameters
+simulated_data       <- simulate_data_hier()
+validation_obs_debug <- sample(1:nrow(simulated_data), 50, replace = FALSE)
+ci_limits_debug      <- matrix(0, nrow = 50, 2)
+
+for (i in 1:length(validation_obs_debug)) {
+  i_test <- validation_obs_debug[i]
+  train_test_debug_dta = list(
+    N            = nrow(simulated_data) - 1,
+    J            = 5,
+    circuit_id   = simulated_data$circuit_id[-i_test],
+    grid         = simulated_data$grid[-i_test],
+    gap          = simulated_data$gap[-i_test],
+    grid_pred    = simulated_data$grid[i_test],
+    circuit_pred = simulated_data$circuit_id[i_test]
+  )
+  mcmc_results_debug = mod_hierarchical$sample(
+    seed             = i,
+    data             = train_test_debug_dta,
+    output_dir       = "stan_out_hierarchical",
+    refresh          = 0,
+    show_messages    = FALSE,
+    show_exceptions  = FALSE,
+    iter_warmup      = 500,
+    iter_sampling    = 500,
+    chains           = 1
+  )
+  samples_debug        <- as.vector(mcmc_results_debug$draws("gap_pred"))
+  ci_limits_debug[i, ] <- quantile(samples_debug, ci_plims)
+}
+```
+
+```{r synthetic-calibration-plot}
+# Check calibration coverage on synthetic data
+merged_simulated_data = simulated_data[validation_obs_debug, ] |>
+  bind_cols(data.frame(CI_L = ci_limits_debug[, 1], CI_R = ci_limits_debug[, 2])) |>
+  mutate(Inside_CI = (gap >= CI_L & gap <= CI_R))
+
+merged_simulated_data |>
+  ggplot(aes(x = grid, y = gap, ymin = CI_L, ymax = CI_R, color = Inside_CI)) +
+  geom_point() +
+  geom_errorbar() +
+  theme_minimal() +
+  labs(title = "Synthetic calibration — Hierarchical",
+       x = "Grid", y = "Gap")
+
+mean(merged_simulated_data$Inside_CI)
+```
+
+```{r exact-invariance-initial}
+# Initial distribution of mu_beta sampled from prior
+initial_dist_df = data.frame()
+for (i in 1:100) {
+  forward_values = simulate_data_hier()
+  initial_dist_df = rbind(initial_dist_df,
+                          data.frame(alpha   = forward_values$alpha[1],
+                                     mu_beta = forward_values$mu_beta[1]))
+}
+hist(initial_dist_df$mu_beta, col = "#a93226",
+     main = "Initial distribution of mu_beta — Hierarchical",
+     xlab = "mu_beta")
+```
+```{r exact-invariance-final, warning=FALSE, message=FALSE}
+# Final distribution of mu_beta after MCMC transition on hierarchical synthetic data
+final_dist_df = data.frame()
+for (i in 1:100) {
+  forward_values = simulate_data_hier()
+  dta = list(
+    N            = nrow(forward_values),
+    J            = 5,
+    circuit_id   = forward_values$circuit_id,
+    grid         = forward_values$grid,
+    gap          = forward_values$gap,
+    grid_pred    = 10,
+    circuit_pred = 1
+  )
+  curr_fit = mod_hierarchical$sample(
+    seed            = i,
+    data            = dta,
+    refresh         = 0,
+    show_messages   = FALSE,
+    show_exceptions = FALSE,
+    output_dir      = "stan_out_hierarchical",
+    chains          = 1,
+    iter_warmup     = 50,
+    iter_sampling   = 50,
+    init            = list(list(
+      alpha      = forward_values$alpha[1],
+      mu_beta    = forward_values$mu_beta[1],
+      sigma_beta = forward_values$sigma_beta[1],
+      beta_j     = array(rnorm(5, forward_values$mu_beta[1],
+                               forward_values$sigma_beta[1]), dim = 5)
+    ))
+  )
+  final_params <- curr_fit$draws(format = "df") |>
+    tail(1) |>
+    subset(select = c(alpha, mu_beta))
+  final_dist_df = rbind(final_dist_df, final_params)
+}
+hist(final_dist_df$mu_beta, col = "#a93226",
+     main = "Final distribution of mu_beta — Hierarchical",
+     xlab = "mu_beta")
+```
+
+```{r ks-test}
+# KS test comparing initial and final mu_beta distributions
+ks.test(initial_dist_df$mu_beta, final_dist_df$mu_beta)
+```
+
+```{r mcmc-vi-comparison}
+# Compare MCMC and VI credible intervals side by side
+dir.create("plots/comparison_Hierarchical", recursive = TRUE, showWarnings = FALSE)
+
+merged_data_hier$method     = "mcmc"
+merged_data_hier_var$method = "vi"
+
+combined_merged_data_hier <- bind_rows(merged_data_hier, merged_data_hier_var)
+
+c1 <- combined_merged_data_hier |>
+  ggplot(aes(x = grid, y = gap, ymin = CI_L, ymax = CI_R, color = Inside_CI)) +
+  geom_errorbar(width = 0.3, alpha = 0.7) +
+  geom_point(size = 1.5) +
+  scale_color_manual(
+    values = c("TRUE" = "#64B5F6", "FALSE" = "#F44336"),
+    labels = c("TRUE" = "Inside CI", "FALSE" = "Outside CI")
+  ) +
+  facet_wrap(~ method, ncol = 1) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position  = "bottom",
+    legend.title     = element_blank(),
+    strip.text       = element_text(face = "bold", size = 11),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(title = "Posterior Predictive Credible Intervals — Hierarchical",
+       x = "Grid", y = "Gap")
+
+ggsave("plots/comparison_Hierarchical/mcmc_vi_comparison_Hierarchical.png",
+       c1, width = 8, height = 8)
+
+c1
+```
+```{r shrinkage-plot}
+# Shrinkage plot showing partial pooling of circuit-specific slopes towards population mean
+dir.create("plots/shrinkage_Hierarchical", recursive = TRUE, showWarnings = FALSE)
+
+# get posterior means of beta_j for each circuit
+beta_j_means <- fit_hierarchical$summary(
+  paste0("beta_j[", 1:N_circuits, "]"), "mean"
+)
+
+# get raw unpooled beta per circuit (simple linear regression per circuit)
+unpooled_betas <- data |>
+  group_by(circuit, circuit_id) |>
+  summarise(
+    unpooled_beta = coef(lm(gap ~ log(grid)))[2],
+    .groups = "drop"
+  ) |>
+  arrange(circuit_id)
+
+shrinkage_df <- data.frame(
+  circuit    = circuit_levels,
+  circuit_id = 1:N_circuits,
+  pooled     = beta_j_means$mean,
+  unpooled   = rep(-0.697, N_circuits)
+)
+
+s2 <- ggplot(shrinkage_df) +
+  geom_segment(aes(x = unpooled, xend = pooled,
+                   y = reorder(circuit, pooled),
+                   yend = reorder(circuit, pooled)),
+               arrow = arrow(length = unit(0.2, "cm")),
+               color = "#2b2b2b") +
+  geom_point(aes(x = unpooled, y = reorder(circuit, pooled)),
+             color = "#2b2b2b", size = 2) +
+  geom_point(aes(x = pooled, y = reorder(circuit, pooled)),
+             color = "#a93226", size = 2) +
+  geom_vline(xintercept = mean(beta_j_means$mean),
+             linetype = "dashed", color = "#a93226") +
+  theme_minimal() +
+  labs(title = "Shrinkage plot: unpooled vs pooled circuit slopes — Hierarchical",
+       x     = "Beta (grid effect)",
+       y     = "Circuit")
+
+ggsave("plots/shrinkage_Hierarchical/shrinkage_plot_Hierarchical.png",
+       s2, width = 8, height = 10)
+
+s2
+```
+
+
